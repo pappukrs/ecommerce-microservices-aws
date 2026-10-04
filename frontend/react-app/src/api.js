@@ -25,68 +25,82 @@ const getAuthHeaders = async () => {
   }
 };
 
+// Parse the JSON body and reject on HTTP errors so callers can show a real error state
+const request = async (path, options) => {
+  const res = await fetch(`${API_BASE_URL}${path}`, options);
+  const data = await res.json().catch(() => null);
+  if (!res.ok) {
+    throw new Error(data?.detail || data?.message || `Request failed (${res.status})`);
+  }
+  return data;
+};
+
 export const api = {
   // Products (public)
-  getProducts: () => 
-    fetch(`${API_BASE_URL}/products`).then(res => res.json()),
-  
-  getProduct: (id) => 
-    fetch(`${API_BASE_URL}/products/${id}`).then(res => res.json()),
-  
+  getProducts: () => request('/products'),
+
+  getProduct: (id) => request(`/products/${id}`),
+
   // Cart (authenticated)
   getCart: async () => {
     const headers = await getAuthHeaders();
-    return fetch(`${API_BASE_URL}/cart`, {
-      headers
-    }).then(res => res.json());
+    return request('/cart', { headers });
   },
-  
+
   addToCart: async (productId, quantity, price) => {
     const headers = await getAuthHeaders();
-    return fetch(`${API_BASE_URL}/cart/items`, {
+    return request('/cart/items', {
       method: 'POST',
       headers: {
         ...headers,
         'Content-Type': 'application/json'
       },
       body: JSON.stringify({ product_id: productId, quantity, price })
-    }).then(res => res.json());
+    });
   },
-  
+
+  updateCartItem: async (productId, quantity) => {
+    const headers = await getAuthHeaders();
+    return request(`/cart/items/${productId}`, {
+      method: 'PUT',
+      headers: {
+        ...headers,
+        'Content-Type': 'application/json'
+      },
+      body: JSON.stringify({ quantity })
+    });
+  },
+
   removeFromCart: async (productId) => {
     const headers = await getAuthHeaders();
-    return fetch(`${API_BASE_URL}/cart/items/${productId}`, {
+    return request(`/cart/items/${productId}`, {
       method: 'DELETE',
       headers
-    }).then(res => res.json());
+    });
   },
-  
+
   // Orders (authenticated)
   createOrder: async () => {
     const headers = await getAuthHeaders();
-    return fetch(`${API_BASE_URL}/orders`, {
+    return request('/orders', {
       method: 'POST',
       headers: {
         ...headers,
         'Content-Type': 'application/json'
       },
       body: JSON.stringify({})
-    }).then(res => res.json());
+    });
   },
-  
+
   getOrders: async () => {
     const headers = await getAuthHeaders();
-    return fetch(`${API_BASE_URL}/orders`, {
-      headers
-    }).then(res => res.json());
+    return request('/orders', { headers });
   },
-  
+
   // User (authenticated)
   getProfile: async () => {
     const headers = await getAuthHeaders();
-    return fetch(`${API_BASE_URL}/users/profile`, {
-      headers
-    }).then(res => res.json());
+    return request('/users/profile', { headers });
   },
 
   // Create user profile after Cognito signup
@@ -95,8 +109,8 @@ export const api = {
     const { fetchAuthSession } = await import('aws-amplify/auth');
     const session = await fetchAuthSession();
     const userId = session.tokens?.idToken?.payload?.sub;
-    
-    return fetch(`${API_BASE_URL}/users/profile`, {
+
+    return request('/users/profile', {
       method: 'POST',
       headers: {
         ...headers,
@@ -107,7 +121,6 @@ export const api = {
         email: email,
         name: name
       })
-    }).then(res => res.json());
+    });
   },
 };
-

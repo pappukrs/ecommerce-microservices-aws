@@ -1,81 +1,115 @@
-.orders {
-  padding: 20px;
-  max-width: 800px;
-  margin: 0 auto;
-}
-
-.orders h1 {
-  text-align: center;
-  margin-bottom: 30px;
-}
-
-.loading {
-  text-align: center;
-  padding: 50px;
-  font-size: 18px;
-}
-
-.no-orders {
-  text-align: center;
-  padding: 50px;
-  color: #666;
-  font-size: 18px;
-}
-
 .orders-list {
-  display: flex;
-  flex-direction: column;
+  display: grid;
   gap: 20px;
+  max-width: 820px;
 }
 
 .order-card {
-  border: 1px solid #ddd;
-  border-radius: 8px;
-  padding: 20px;
-  background: white;
+  border: 1px solid var(--line);
+  border-radius: var(--radius-lg);
+  background: var(--surface);
+  overflow: hidden;
 }
 
 .order-header {
   display: flex;
-  justify-content: space-between;
   align-items: center;
-  margin-bottom: 10px;
+  justify-content: space-between;
+  gap: 16px;
+  padding: 18px 20px;
+  border-bottom: 1px solid var(--line);
+  background: var(--surface-muted);
 }
 
 .order-header h3 {
-  margin: 0;
-}
-
-.status {
-  padding: 5px 15px;
-  background: #FFC107;
-  color: white;
-  border-radius: 20px;
-  font-size: 14px;
-  text-transform: capitalize;
+  font-size: 1rem;
+  font-weight: 700;
 }
 
 .order-date {
-  color: #666;
-  margin-bottom: 15px;
+  margin-top: 2px;
+  color: var(--muted);
+  font-size: 0.875rem;
 }
 
 .order-items {
-  border-top: 1px solid #eee;
-  border-bottom: 1px solid #eee;
-  padding: 15px 0;
-  margin-bottom: 15px;
+  padding: 8px 20px;
 }
 
 .order-item {
-  display: flex;
-  justify-content: space-between;
-  padding: 8px 0;
-  color: #666;
+  display: grid;
+  grid-template-columns: 48px minmax(0, 1fr) auto 88px;
+  align-items: center;
+  gap: 14px;
+  padding: 12px 0;
+}
+
+.order-item + .order-item {
+  border-top: 1px solid var(--line);
+}
+
+.order-item-name {
+  overflow: hidden;
+  font-weight: 500;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.order-item-qty {
+  color: var(--muted);
+  font-size: 0.875rem;
+}
+
+.order-item-total {
+  font-weight: 600;
+  text-align: right;
 }
 
 .order-total {
-  text-align: right;
-  font-size: 18px;
-  color: #2196F3;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 16px 20px;
+  border-top: 1px solid var(--line);
+  color: var(--ink-soft);
+}
+
+.order-total strong {
+  color: var(--ink);
+  font-size: 1.125rem;
+}
+
+@media (max-width: 640px) {
+  .order-header,
+  .order-total {
+    padding: 14px 16px;
+  }
+
+  .order-items {
+    padding: 4px 16px;
+  }
+
+  .order-item {
+    grid-template-columns: 48px minmax(0, 1fr) auto;
+    grid-template-areas:
+      "thumb name total"
+      "thumb qty total";
+    gap: 2px 12px;
+  }
+
+  .order-item .thumb {
+    grid-area: thumb;
+  }
+
+  .order-item-name {
+    grid-area: name;
+  }
+
+  .order-item-qty {
+    grid-area: qty;
+  }
+
+  .order-item-total {
+    grid-area: total;
+  }
 }

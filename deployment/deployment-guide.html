@@ -1,0 +1,998 @@
+<!DOCTYPE html>
+<html lang="en">
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Ecommerce AWS Deployment Guide</title>
+<style>
+  /* One-page runbook: sticky module list on the left, one card per module. Tokens match architecture.html. */
+  :root {
+    --bg: #f5f7fa; --card: #ffffff; --text: #16202c; --muted: #5a6878; --border: #d9e0e8;
+    --orange: #e07b00; --orange-soft: #fff4e5; --ok: #2f7d1f; --ok-soft: #e9f6e0;
+    --warn: #9a5b00; --warn-soft: #fff6dd; --bad: #c0362c; --bad-soft: #fdecea;
+    --info: #1272b0; --info-soft: #e6f1fa; --code-bg: #111a24; --code-text: #e8eef5;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root:not([data-theme="light"]) {
+      --bg: #0f151c; --card: #18212c; --text: #e8eef5; --muted: #9aa8b8; --border: #2c3948;
+      --orange: #ff9d2e; --orange-soft: #33240f; --ok: #7cc653; --ok-soft: #1a2e15;
+      --warn: #f0b84a; --warn-soft: #33290f; --bad: #ff7b72; --bad-soft: #3a1a17;
+      --info: #55b0ee; --info-soft: #142736; --code-bg: #0b1118; --code-text: #e8eef5; color-scheme: dark;
+    }
+  }
+  :root[data-theme="dark"] {
+    --bg: #0f151c; --card: #18212c; --text: #e8eef5; --muted: #9aa8b8; --border: #2c3948;
+    --orange: #ff9d2e; --orange-soft: #33240f; --ok: #7cc653; --ok-soft: #1a2e15;
+    --warn: #f0b84a; --warn-soft: #33290f; --bad: #ff7b72; --bad-soft: #3a1a17;
+    --info: #55b0ee; --info-soft: #142736; --code-bg: #0b1118; --code-text: #e8eef5; color-scheme: dark;
+  }
+  * { box-sizing: border-box; }
+  html { scroll-behavior: smooth; scroll-padding-top: 16px; }
+  body { margin: 0; background: var(--bg); color: var(--text); font: 16px/1.6 system-ui, -apple-system, "Segoe UI", Roboto, sans-serif; }
+  .layout { display: grid; grid-template-columns: 250px minmax(0, 1fr); gap: 32px; max-width: 1240px; margin: 0 auto; padding: 24px 16px 80px; }
+  a { color: var(--info); }
+  h1 { margin: 4px 0 8px; font-size: 30px; line-height: 1.2; }
+  h2 { margin: 0; font-size: 22px; line-height: 1.25; }
+  h3 { margin: 28px 0 8px; font-size: 17px; }
+  p { margin: 0 0 12px; }
+  ul, ol { margin: 0 0 12px; padding-left: 22px; }
+  li { margin-bottom: 4px; }
+  .tag { color: var(--orange); font-weight: 700; letter-spacing: .08em; text-transform: uppercase; font-size: 13px; }
+  .lead { color: var(--muted); max-width: 720px; }
+
+  /* Sidebar */
+  .toc { position: sticky; top: 16px; align-self: start; max-height: calc(100vh - 32px); overflow-y: auto; font-size: 14.5px; }
+  .toc-title { font-weight: 700; margin-bottom: 8px; }
+  .toc a { display: flex; justify-content: space-between; gap: 8px; padding: 6px 10px; border-radius: 8px; color: var(--text); text-decoration: none; }
+  .toc a:hover { background: var(--card); }
+  .toc a.done { color: var(--ok); }
+  .toc .count { color: var(--muted); font-size: 12.5px; white-space: nowrap; }
+  .toc a.done .count { color: var(--ok); }
+  .progress { height: 8px; margin: 10px 0 6px; border-radius: 99px; background: var(--border); overflow: hidden; }
+  .progress > div { height: 100%; width: 0; background: var(--orange); transition: width .2s; }
+  .progress-label { color: var(--muted); font-size: 13px; margin-bottom: 14px; }
+  .toc button { width: 100%; margin-top: 14px; }
+
+  /* Cards */
+  .card { background: var(--card); border: 1px solid var(--border); border-radius: 12px; padding: 20px; margin-top: 20px; min-width: 0; }
+  .module-head { display: flex; flex-wrap: wrap; align-items: center; gap: 10px 14px; }
+  .num { flex: none; width: 36px; height: 36px; border-radius: 50%; background: var(--orange); color: #fff; font-weight: 700; display: inline-flex; align-items: center; justify-content: center; }
+  .chips { display: flex; flex-wrap: wrap; gap: 6px; margin-left: auto; }
+  .chip { padding: 3px 10px; border-radius: 99px; font-size: 12.5px; font-weight: 600; background: var(--bg); color: var(--muted); border: 1px solid var(--border); }
+  .chip.cost { background: var(--warn-soft); color: var(--warn); border-color: transparent; }
+  .goal { margin: 12px 0 0; color: var(--muted); }
+
+  /* Tasks */
+  .task { display: flex; gap: 10px; align-items: flex-start; margin: 26px 0 8px; font-size: 17px; font-weight: 700; cursor: pointer; }
+  .task input { flex: none; width: 20px; height: 20px; margin: 4px 0 0; accent-color: var(--orange); cursor: pointer; }
+  .task:has(input:checked) span { color: var(--ok); }
+  .path { color: var(--muted); font-size: 14.5px; margin: -2px 0 8px 30px; }
+  .body { margin-left: 30px; }
+
+  /* Callouts */
+  .note { margin: 12px 0; padding: 10px 14px; border-radius: 0 8px 8px 0; border-left: 4px solid var(--info); background: var(--info-soft); font-size: 15px; }
+  .note.warn { border-color: var(--orange); background: var(--warn-soft); }
+  .note.bad { border-color: var(--bad); background: var(--bad-soft); }
+  .note.ok { border-color: var(--ok); background: var(--ok-soft); }
+  .note b:first-child { display: inline-block; margin-right: 4px; }
+
+  /* Tables */
+  .table-wrap { overflow-x: auto; margin: 0 0 12px; }
+  table { width: 100%; border-collapse: collapse; font-size: 15px; }
+  th, td { text-align: left; padding: 8px 12px; border-bottom: 1px solid var(--border); vertical-align: top; }
+  th { color: var(--muted); font-size: 13px; text-transform: uppercase; letter-spacing: .05em; white-space: nowrap; }
+  td code { white-space: nowrap; }
+
+  /* Code */
+  code { background: var(--bg); border: 1px solid var(--border); border-radius: 5px; padding: 1px 5px; font-size: 14px; font-family: ui-monospace, Menlo, Consolas, monospace; }
+  .cmd { position: relative; margin: 8px 0 14px; }
+  .cmd pre { margin: 0; padding: 14px 16px; padding-right: 76px; border-radius: 10px; background: var(--code-bg); color: var(--code-text); overflow-x: auto; font: 13.5px/1.55 ui-monospace, Menlo, Consolas, monospace; }
+  .cmd pre code { background: none; border: 0; padding: 0; font-size: inherit; color: inherit; }
+  .cmd .copy { position: absolute; top: 8px; right: 8px; padding: 4px 10px; font-size: 12.5px; border-radius: 6px; border: 1px solid #3a4a5c; background: #1c2936; color: #e8eef5; }
+  var { font-style: normal; color: #ffc46b; }
+  var.empty { color: #ff9b93; }
+  td var, p var, li var { color: var(--orange); font-family: ui-monospace, Menlo, Consolas, monospace; font-size: 14px; }
+  td var.empty, p var.empty, li var.empty { color: var(--bad); }
+
+  /* Worksheet */
+  .sheet { display: grid; grid-template-columns: repeat(auto-fit, minmax(260px, 1fr)); gap: 12px 16px; margin-top: 14px; }
+  .sheet label { display: block; font-size: 13.5px; font-weight: 600; }
+  .sheet small { display: block; color: var(--muted); font-weight: 400; }
+  .sheet input { width: 100%; margin-top: 4px; padding: 8px 10px; border-radius: 8px; border: 1px solid var(--border); background: var(--bg); color: var(--text); font: 14px ui-monospace, Menlo, Consolas, monospace; }
+  button { font: inherit; font-size: 14px; padding: 7px 14px; border-radius: 8px; border: 1px solid var(--border); background: var(--card); color: var(--text); cursor: pointer; }
+  button:hover { border-color: var(--orange); }
+  button:focus-visible, input:focus-visible, a:focus-visible { outline: 2px solid var(--orange); outline-offset: 2px; }
+
+  @media (max-width: 900px) {
+    .layout { grid-template-columns: minmax(0, 1fr); gap: 0; }
+    .toc { position: static; max-height: none; margin-bottom: 8px; padding: 14px; background: var(--card); border: 1px solid var(--border); border-radius: 12px; }
+    .toc nav { display: grid; grid-template-columns: repeat(auto-fit, minmax(150px, 1fr)); }
+    .chips { margin-left: 0; }
+    .body, .path { margin-left: 0; }
+  }
+</style>
+
+<div class="layout">
+  <aside class="toc">
+    <div class="toc-title">Deployment run</div>
+    <div class="progress"><div id="bar"></div></div>
+    <div class="progress-label" id="progressLabel">0 of 0 steps done</div>
+    <nav id="toc"></nav>
+    <button id="btnReset">Start a new run</button>
+  </aside>
+
+  <main>
+    <header>
+      <div class="tag">AWS · Runbook</div>
+      <h1>Ecommerce AWS Deployment Guide</h1>
+      <p class="lead">Everything needed to build the stack from an empty account and tear it down again, in order. Tick each step as you go; your progress and the values you type are saved in this browser. The picture of what you are building is in <a href="architecture.html">architecture.html</a>.</p>
+    </header>
+
+    <!-- ============ Setup ============ -->
+    <section class="card module" id="m0" data-title="Setup">
+      <div class="module-head">
+        <span class="num">0</span><h2>Before you start</h2>
+        <div class="chips"><span class="chip">5 min</span></div>
+      </div>
+      <p class="goal">Point the terminal and the console at the right account and region, and fill in the worksheet as values appear.</p>
+
+      <label class="task"><input type="checkbox" data-id="0.1"><span>Check the local tools</span></label>
+      <div class="body">
+        <div class="cmd"><pre><code>aws --version &amp;&amp; docker --version &amp;&amp; node --version &amp;&amp; npm --version &amp;&amp; jq --version</code></pre></div>
+        <p>You need AWS CLI v2, Docker, Node.js 20 or newer, and jq. Docker only has to be running from module 5.</p>
+      </div>
+
+      <label class="task"><input type="checkbox" data-id="0.2"><span>Select the account in the terminal</span></label>
+      <div class="body">
+        <p>Run this in every new terminal. All commands in this guide rely on it.</p>
+        <div class="cmd"><pre><code>export AWS_PROFILE=<var data-v="profile">&lt;profile&gt;</var> AWS_DEFAULT_REGION=<var data-v="region">&lt;region&gt;</var>
+aws sts get-caller-identity --query Account --output text</code></pre></div>
+        <p>The number printed must be the account you mean to deploy into. Put it in the worksheet.</p>
+      </div>
+
+      <label class="task"><input type="checkbox" data-id="0.3"><span>Select the region in the console</span></label>
+      <div class="body">
+        <p>Top right of the AWS console: choose <b>Asia Pacific (Mumbai)</b>. Check it again whenever you open a new service; a resource created in the wrong region will not show up anywhere else.</p>
+      </div>
+
+      <h3>Worksheet</h3>
+      <p>Type values here as you create things. They are filled into the commands below and stay in this browser only.</p>
+      <div class="sheet">
+        <label>CLI profile<small>Name from <code>aws configure list-profiles</code></small><input data-var="profile" placeholder="my-profile"></label>
+        <label>Region<small>Used for every regional resource</small><input data-var="region" placeholder="ap-south-1"></label>
+        <label>Account ID<small>12 digits, from step 0.2</small><input data-var="account" placeholder="123456789012"></label>
+        <label>Frontend bucket<small>Exact name, module 3</small><input data-var="bucket" placeholder="ecommerce-frontend-…"></label>
+        <label>CloudFront domain<small>Module 3, without https://</small><input data-var="cfDomain" placeholder="dxxxxxxxxxxxxx.cloudfront.net"></label>
+        <label>CloudFront distribution ID<small>Module 3</small><input data-var="cfId" placeholder="E1234567890ABC"></label>
+        <label>Cognito user pool ID<small>Module 2</small><input data-var="poolId" placeholder="ap-south-1_xxxxxxxxx"></label>
+        <label>Cognito app client ID<small>Module 2</small><input data-var="clientId" placeholder="26 characters"></label>
+        <label>RDS endpoint<small>Module 4, hostname only</small><input data-var="rds" placeholder="ecommercedb-instance.….rds.amazonaws.com"></label>
+        <label>Internal ALB DNS name<small>Module 5</small><input data-var="albDns" placeholder="internal-ecommerce-internal-alb-….elb.amazonaws.com"></label>
+        <label>API Gateway URL<small>Module 6, with https://</small><input data-var="apiUrl" placeholder="https://xxxxxxxxxx.execute-api.ap-south-1.amazonaws.com"></label>
+      </div>
+
+      <div class="note warn"><b>Cost.</b> Four things bill by the hour from the moment they exist: the NAT gateway (module 1), the RDS instance (module 4), the load balancer and the four Fargate tasks (module 5). Together they come to roughly $4 a day. Finish in one or two sittings and run the cleanup at the end.</div>
+    </section>
+
+    <!-- ============ Module 1 ============ -->
+    <section class="card module" id="m1" data-title="Networking">
+      <div class="module-head">
+        <span class="num">1</span><h2>Networking</h2>
+        <div class="chips"><span class="chip">15–20 min</span><span class="chip">VPC console</span><span class="chip cost">NAT gateway bills hourly</span></div>
+      </div>
+      <p class="goal">One VPC across two Availability Zones with public, private ECS and private database subnets, an internet gateway, a NAT gateway and three route tables.</p>
+
+      <label class="task"><input type="checkbox" data-id="1.1"><span>Create the VPC</span></label>
+      <p class="path">VPC → Your VPCs → Create VPC → “VPC only”</p>
+      <div class="body"><ul>
+        <li>Name: <code>ecommerce-vpc</code></li>
+        <li>IPv4 CIDR: <code>10.10.0.0/16</code>, no IPv6, default tenancy</li>
+      </ul></div>
+
+      <label class="task"><input type="checkbox" data-id="1.2"><span>Create and attach the internet gateway</span></label>
+      <p class="path">VPC → Internet gateways → Create</p>
+      <div class="body"><ul>
+        <li>Name: <code>ecommerce-igw</code></li>
+        <li>Then Actions → Attach to VPC → <code>ecommerce-vpc</code></li>
+      </ul></div>
+
+      <label class="task"><input type="checkbox" data-id="1.3"><span>Create the six subnets</span></label>
+      <p class="path">VPC → Subnets → Create subnet → VPC <code>ecommerce-vpc</code></p>
+      <div class="body">
+        <div class="table-wrap"><table>
+          <tr><th>Name</th><th>CIDR</th><th>Zone</th></tr>
+          <tr><td><code>ecommerce-public-subnet-1</code></td><td><code>10.10.0.0/24</code></td><td>ap-south-1a</td></tr>
+          <tr><td><code>ecommerce-public-subnet-2</code></td><td><code>10.10.1.0/24</code></td><td>ap-south-1b</td></tr>
+          <tr><td><code>ecommerce-private-ecs-1</code></td><td><code>10.10.10.0/24</code></td><td>ap-south-1a</td></tr>
+          <tr><td><code>ecommerce-private-ecs-2</code></td><td><code>10.10.11.0/24</code></td><td>ap-south-1b</td></tr>
+          <tr><td><code>ecommerce-private-database-1</code></td><td><code>10.10.20.0/24</code></td><td>ap-south-1a</td></tr>
+          <tr><td><code>ecommerce-private-database-2</code></td><td><code>10.10.21.0/24</code></td><td>ap-south-1b</td></tr>
+        </table></div>
+        <p>You can add all six in one “Create subnet” form with “Add new subnet”.</p>
+      </div>
+
+      <label class="task"><input type="checkbox" data-id="1.4"><span>Create the NAT gateway</span></label>
+      <p class="path">VPC → NAT gateways → Create</p>
+      <div class="body"><ul>
+        <li>Name: <code>ecommerce-nat-gateway</code></li>
+        <li>Subnet: <code>ecommerce-public-subnet-1</code>, connectivity type Public</li>
+        <li>Click <b>Allocate Elastic IP</b></li>
+        <li>Wait until the state is <b>Available</b> before the next step</li>
+      </ul></div>
+
+      <label class="task"><input type="checkbox" data-id="1.5"><span>Create the three route tables</span></label>
+      <p class="path">VPC → Route tables → Create → VPC <code>ecommerce-vpc</code></p>
+      <div class="body">
+        <div class="table-wrap"><table>
+          <tr><th>Name</th><th>Add route</th><th>Associate subnets</th></tr>
+          <tr><td><code>ecommerce-public-rt</code></td><td><code>0.0.0.0/0</code> → Internet gateway</td><td>Both public</td></tr>
+          <tr><td><code>ecommerce-private-ecs-rt</code></td><td><code>0.0.0.0/0</code> → <b>NAT gateway</b></td><td>Both private ECS</td></tr>
+          <tr><td><code>ecommerce-private-db-rt</code></td><td>None</td><td>Both private database</td></tr>
+        </table></div>
+        <div class="note bad"><b>Watch out.</b> The ECS route table must point at the NAT gateway, not the internet gateway. With the internet gateway the tasks get no outbound access (they have no public IP) and fail to pull images in module 5.</div>
+      </div>
+
+      <label class="task"><input type="checkbox" data-id="1.6"><span>Verify from the terminal</span></label>
+      <div class="body">
+        <div class="cmd"><pre><code>VPC=$(aws ec2 describe-vpcs --filters Name=tag:Name,Values=ecommerce-vpc --query 'Vpcs[0].VpcId' --output text)
+aws ec2 describe-subnets --filters Name=vpc-id,Values=$VPC \
+  --query 'sort_by(Subnets,&amp;CidrBlock)[].[Tags[?Key==`Name`]|[0].Value,CidrBlock,AvailabilityZone]' --output table
+aws ec2 describe-nat-gateways --filter Name=vpc-id,Values=$VPC --query 'NatGateways[].[NatGatewayId,State]' --output table
+aws ec2 describe-route-tables --filters Name=vpc-id,Values=$VPC \
+  --query 'RouteTables[].{Name:Tags[?Key==`Name`]|[0].Value,Default:Routes[?DestinationCidrBlock==`0.0.0.0/0`]|[0].[GatewayId,NatGatewayId],Subnets:length(Associations[?SubnetId!=null])}' --output json</code></pre></div>
+        <div class="note ok"><b>Expect.</b> Six subnets, NAT gateway <code>available</code>, the public table’s default route showing an <code>igw-…</code>, the ECS table’s showing a <code>nat-…</code>, the database table’s empty, and two subnets on each of the three named tables. A fourth table with no name and no subnets is the VPC’s main route table; leave it alone.</div>
+      </div>
+    </section>
+
+    <!-- ============ Module 2 ============ -->
+    <section class="card module" id="m2" data-title="Cognito">
+      <div class="module-head">
+        <span class="num">2</span><h2>Authentication with Cognito</h2>
+        <div class="chips"><span class="chip">5–10 min</span><span class="chip">Cognito console</span></div>
+      </div>
+      <p class="goal">A user pool for accounts and an app client the React app signs in through.</p>
+
+      <label class="task"><input type="checkbox" data-id="2.1"><span>Create the user pool</span></label>
+      <p class="path">Cognito → User pools → Create user pool</p>
+      <div class="body"><ul>
+        <li>Application type: <b>Single-page application (SPA)</b></li>
+        <li>Application name: <code>ecommerce-app</code></li>
+        <li>Sign-in identifier: <b>Email</b></li>
+        <li>Self-registration: enabled</li>
+        <li>Required attributes: <b>email</b> and <b>name</b></li>
+        <li>Return URL: leave blank</li>
+      </ul>
+      <p>The wizard gives the pool an automatic name such as “User pool - abc123”. Only the app client is called <code>ecommerce-app</code>. That is fine.</p></div>
+
+      <label class="task"><input type="checkbox" data-id="2.2"><span>Enable the auth flows on the app client</span></label>
+      <p class="path">The user pool → App clients → <code>ecommerce-app</code> → Edit</p>
+      <div class="body"><ul>
+        <li><code>ALLOW_USER_PASSWORD_AUTH</code></li>
+        <li><code>ALLOW_USER_SRP_AUTH</code></li>
+        <li><code>ALLOW_REFRESH_TOKEN_AUTH</code></li>
+      </ul>
+      <p>Copy the <b>User pool ID</b> and <b>App client ID</b> into the worksheet.</p></div>
+
+      <label class="task"><input type="checkbox" data-id="2.3"><span>Verify from the terminal</span></label>
+      <div class="body">
+        <div class="cmd"><pre><code>aws cognito-idp describe-user-pool-client --user-pool-id <var data-v="poolId">&lt;user-pool-id&gt;</var> --client-id <var data-v="clientId">&lt;client-id&gt;</var> \
+  --query 'UserPoolClient.{Name:ClientName,Secret:ClientSecret,Flows:ExplicitAuthFlows}' --output json</code></pre></div>
+        <div class="note ok"><b>Expect.</b> The three flows listed and <code>Secret</code> null.</div>
+      </div>
+    </section>
+
+    <!-- ============ Module 3 ============ -->
+    <section class="card module" id="m3" data-title="Frontend hosting">
+      <div class="module-head">
+        <span class="num">3</span><h2>Frontend hosting</h2>
+        <div class="chips"><span class="chip">20 min</span><span class="chip">S3, CloudFront, terminal</span></div>
+      </div>
+      <p class="goal">A private S3 bucket holding the React build, served over HTTPS by CloudFront. Login works at the end; products appear after module 7.</p>
+
+      <label class="task"><input type="checkbox" data-id="3.1"><span>Create the bucket</span></label>
+      <p class="path">S3 → Create bucket → General purpose</p>
+      <div class="body"><ul>
+        <li>Name: <code>ecommerce-frontend-</code> plus your account ID (it must be globally unique)</li>
+        <li>Keep <b>Block all public access</b> on, versioning off, default encryption</li>
+      </ul>
+      <p>The console may add a suffix to the name. Copy the exact final name into the worksheet.</p></div>
+
+      <label class="task"><input type="checkbox" data-id="3.2"><span>Create the CloudFront distribution</span></label>
+      <p class="path">CloudFront → Distributions → Create distribution</p>
+      <div class="body"><ul>
+        <li>Name: <code>ecommerce-distribution</code>, type <b>Single website or app</b></li>
+        <li>Origin type: Amazon S3, and select the bucket</li>
+        <li>Keep “Allow private S3 bucket access to CloudFront” and the recommended cache settings</li>
+        <li>Security: <b>Do not enable security protections</b> (the other option adds a paid WAF)</li>
+      </ul>
+      <p>Copy the <b>distribution domain name</b> and <b>ID</b> into the worksheet.</p></div>
+
+      <label class="task"><input type="checkbox" data-id="3.3"><span>Set the root object and error pages</span></label>
+      <p class="path">The distribution → General → Edit, then the Error pages tab</p>
+      <div class="body"><ul>
+        <li>Default root object: <code>index.html</code>, then Save</li>
+        <li>Error pages → Create custom error response: code <b>403</b>, customize = Yes, path <code>/index.html</code>, response code <b>200</b></li>
+        <li>Repeat for code <b>404</b></li>
+      </ul>
+      <p>These make React’s client-side routes such as <code>/orders</code> load when opened directly.</p></div>
+
+      <label class="task"><input type="checkbox" data-id="3.4"><span>Configure, build and upload the frontend</span></label>
+      <div class="body">
+        <p>From the repo root. Leave the API URL empty for now.</p>
+        <div class="cmd"><pre><code>cd frontend/react-app
+cat &gt; .env &lt;&lt;'EOF'
+REACT_APP_USER_POOL_ID=<var data-v="poolId">&lt;user-pool-id&gt;</var>
+REACT_APP_USER_POOL_CLIENT_ID=<var data-v="clientId">&lt;client-id&gt;</var>
+REACT_APP_API_BASE_URL=
+EOF
+npm install
+npm install --no-save typescript@4.9.5
+npm run build
+aws s3 sync build/ s3://<var data-v="bucket">&lt;frontend-bucket&gt;</var> --delete --exclude "images/*"
+cd ../..</code></pre></div>
+        <div class="note warn"><b>Watch out.</b> Without the TypeScript line the build fails with <code>Environment key "jest/globals" is unknown</code>: npm installs TypeScript 7, which <code>react-scripts</code> 5 cannot load. Repeat that line after any fresh <code>npm install</code>.</div>
+      </div>
+
+      <label class="task"><input type="checkbox" data-id="3.5"><span>Set the Cognito callback URLs</span></label>
+      <p class="path">Cognito → the user pool → App clients → <code>ecommerce-app</code> → Login pages → Edit</p>
+      <div class="body">
+        <p>Set both <b>Allowed callback URLs</b> and <b>Allowed sign-out URLs</b> to:</p>
+        <div class="cmd"><pre><code>https://<var data-v="cfDomain">&lt;cloudfront-domain&gt;</var></code></pre></div>
+        <div class="note warn"><b>Watch out.</b> “Callback URL contains invalid characters” means a space before or after the URL. Clear the field and paste again.</div>
+      </div>
+
+      <label class="task"><input type="checkbox" data-id="3.6"><span>Verify</span></label>
+      <div class="body">
+        <div class="cmd"><pre><code>aws cloudfront get-distribution --id <var data-v="cfId">&lt;distribution-id&gt;</var> \
+  --query 'Distribution.{Status:Status,Root:DistributionConfig.DefaultRootObject,Errors:DistributionConfig.CustomErrorResponses.Items[].[ErrorCode,ResponsePagePath,ResponseCode]}' --output json
+curl -s -o /dev/null -w "/ %{http_code}\n" https://<var data-v="cfDomain">&lt;cloudfront-domain&gt;</var>/
+curl -s -o /dev/null -w "/orders %{http_code}\n" https://<var data-v="cfDomain">&lt;cloudfront-domain&gt;</var>/orders</code></pre></div>
+        <div class="note ok"><b>Expect.</b> Status <code>Deployed</code>, root <code>index.html</code>, both error codes mapped, and 200 for both URLs. Then open the site, sign up, confirm the emailed code and log in. The product list is empty until module 7.</div>
+      </div>
+    </section>
+
+    <!-- ============ Module 4 ============ -->
+    <section class="card module" id="m4" data-title="Data layer">
+      <div class="module-head">
+        <span class="num">4</span><h2>Data layer</h2>
+        <div class="chips"><span class="chip">20–30 min</span><span class="chip">S3, DynamoDB, RDS, Parameter Store</span><span class="chip cost">RDS bills hourly</span></div>
+      </div>
+      <p class="goal">Product images in S3, two DynamoDB tables, a PostgreSQL database in the private database subnets, and the settings the services read at startup.</p>
+
+      <label class="task"><input type="checkbox" data-id="4.1"><span>Upload the product images</span></label>
+      <div class="body">
+        <div class="cmd"><pre><code>cd data
+bash upload-images-to-s3.sh <var data-v="bucket">&lt;frontend-bucket&gt;</var> <var data-v="region">&lt;region&gt;</var>
+curl -s -o /dev/null -w "image %{http_code}\n" https://<var data-v="cfDomain">&lt;cloudfront-domain&gt;</var>/images/products/prod-001.jpg</code></pre></div>
+        <p>The last line should print 200.</p>
+      </div>
+
+      <label class="task"><input type="checkbox" data-id="4.2"><span>Create the two DynamoDB tables</span></label>
+      <p class="path">DynamoDB → Tables → Create table → Customize settings → Capacity mode: On-demand</p>
+      <div class="body">
+        <div class="table-wrap"><table>
+          <tr><th>Table name</th><th>Partition key</th></tr>
+          <tr><td><code>ecommerce-products</code></td><td><code>product_id</code> (String)</td></tr>
+          <tr><td><code>ecommerce-cart</code></td><td><code>user_id</code> (String)</td></tr>
+        </table></div>
+        <p>No sort key on either.</p>
+      </div>
+
+      <label class="task"><input type="checkbox" data-id="4.3"><span>Load the 20 products</span></label>
+      <div class="body">
+        <p>Still inside <code>data/</code>:</p>
+        <div class="cmd"><pre><code>bash update-product-image-urls.sh https://<var data-v="cfDomain">&lt;cloudfront-domain&gt;</var>
+bash load-products.sh <var data-v="region">&lt;region&gt;</var>
+aws dynamodb scan --table-name ecommerce-products --select COUNT --query Count
+cd ..</code></pre></div>
+        <p>The count should be 20.</p>
+      </div>
+
+      <label class="task"><input type="checkbox" data-id="4.4"><span>Create the DB subnet group</span></label>
+      <p class="path">RDS → Subnet groups → Create DB subnet group</p>
+      <div class="body"><ul>
+        <li>Name: <code>ecommerce-db-subnet-group</code>, VPC <code>ecommerce-vpc</code></li>
+        <li>Zones ap-south-1a and ap-south-1b, subnets <code>10.10.20.0/24</code> and <code>10.10.21.0/24</code></li>
+      </ul></div>
+
+      <label class="task"><input type="checkbox" data-id="4.5"><span>Create the RDS security group</span></label>
+      <p class="path">VPC → Security groups → Create</p>
+      <div class="body"><ul>
+        <li>Name: <code>ecommerce-rds-sg</code>, VPC <code>ecommerce-vpc</code></li>
+        <li>Inbound: PostgreSQL (5432) from <code>10.10.0.0/16</code></li>
+      </ul></div>
+
+      <label class="task"><input type="checkbox" data-id="4.6"><span>Create the PostgreSQL instance</span></label>
+      <p class="path">RDS → Databases → Create database → <b>Full configuration</b></p>
+      <div class="body">
+        <div class="note bad"><b>Watch out.</b> “Easy create” has no VPC option and always uses the default VPC, which cannot be changed afterwards. Choose Full configuration.</div>
+        <div class="table-wrap"><table>
+          <tr><th>Section</th><th>Setting</th></tr>
+          <tr><td>Engine and template</td><td>PostgreSQL, <b>Free tier</b></td></tr>
+          <tr><td>Identifier and user</td><td><code>ecommercedb-instance</code>, master username <code>postgres</code></td></tr>
+          <tr><td>Credentials</td><td>Self managed; choose a password of letters and digits and note it</td></tr>
+          <tr><td>Instance and storage</td><td><code>db.t4g.micro</code> (or <code>db.t3.micro</code>), 20 GiB</td></tr>
+          <tr><td>Compute resource</td><td>Don’t connect to an EC2 compute resource</td></tr>
+          <tr><td>Network</td><td>VPC <code>ecommerce-vpc</code>, subnet group <code>ecommerce-db-subnet-group</code>, public access <b>No</b></td></tr>
+          <tr><td>Security group</td><td>Existing: <code>ecommerce-rds-sg</code> only (remove <code>default</code>)</td></tr>
+          <tr><td>Availability Zone</td><td>ap-south-1a</td></tr>
+          <tr><td>Additional configuration</td><td>Initial database name <b><code>ecommercedb</code></b>; automated backups off</td></tr>
+        </table></div>
+        <p>The initial database name is easy to miss, and the user and order services fail without it. Creation takes 5 to 10 minutes. Copy the endpoint into the worksheet when the status is Available.</p>
+      </div>
+
+      <label class="task"><input type="checkbox" data-id="4.7"><span>Create three parameters</span></label>
+      <p class="path">Systems Manager → Parameter Store → Create parameter</p>
+      <div class="body">
+        <div class="table-wrap"><table>
+          <tr><th>Name</th><th>Type</th><th>Value</th></tr>
+          <tr><td><code>/ecommerce/dev/aws/region</code></td><td>String</td><td><var data-v="region">&lt;region&gt;</var></td></tr>
+          <tr><td><code>/ecommerce/dev/db/host</code></td><td>String</td><td><var data-v="rds">&lt;rds-endpoint&gt;</var></td></tr>
+          <tr><td><code>/ecommerce/dev/db/password</code></td><td><b>SecureString</b></td><td>The database password</td></tr>
+        </table></div>
+        <p>Hostname only for the host: no port, no spaces.</p>
+      </div>
+
+      <label class="task"><input type="checkbox" data-id="4.8"><span>Verify from the terminal</span></label>
+      <div class="body">
+        <div class="cmd"><pre><code>aws rds describe-db-instances --db-instance-identifier ecommercedb-instance \
+  --query 'DBInstances[0].{Status:DBInstanceStatus,DB:DBName,Public:PubliclyAccessible,SubnetGroup:DBSubnetGroup.DBSubnetGroupName,Endpoint:Endpoint.Address}' --output json
+aws ssm get-parameters-by-path --path /ecommerce --recursive --query 'Parameters[].[Name,Type]' --output table</code></pre></div>
+        <div class="note ok"><b>Expect.</b> Status <code>available</code>, DB <code>ecommercedb</code>, Public <code>false</code>, the right subnet group, and three parameters.</div>
+      </div>
+    </section>
+
+    <!-- ============ Module 5 ============ -->
+    <section class="card module" id="m5" data-title="Backend on ECS">
+      <div class="module-head">
+        <span class="num">5</span><h2>Backend services on ECS</h2>
+        <div class="chips"><span class="chip">45–60 min</span><span class="chip">EC2, ECR, IAM, ECS</span><span class="chip cost">ALB and Fargate bill hourly</span></div>
+      </div>
+      <p class="goal">Four containers on Fargate in the private ECS subnets, behind an internal load balancer that routes by path.</p>
+
+      <label class="task"><input type="checkbox" data-id="5.1"><span>Create the ALB security group</span></label>
+      <p class="path">VPC → Security groups → Create</p>
+      <div class="body"><ul>
+        <li>Name: <code>ecommerce-alb-sg</code>, VPC <code>ecommerce-vpc</code></li>
+        <li>Inbound: HTTP (80) from <code>10.10.0.0/16</code></li>
+      </ul></div>
+
+      <label class="task"><input type="checkbox" data-id="5.2"><span>Create four target groups</span></label>
+      <p class="path">EC2 → Target groups → Create target group</p>
+      <div class="body">
+        <p>All four: target type <b>IP addresses</b>, protocol HTTP, VPC <b><code>ecommerce-vpc</code></b>, health check path <code>/health</code>. Register no targets.</p>
+        <div class="table-wrap"><table>
+          <tr><th>Name</th><th>Port</th></tr>
+          <tr><td><code>product-service-tg</code></td><td>8001</td></tr>
+          <tr><td><code>cart-service-tg</code></td><td>8002</td></tr>
+          <tr><td><code>user-service-tg</code></td><td>8003</td></tr>
+          <tr><td><code>order-service-tg</code></td><td>8004</td></tr>
+        </table></div>
+        <div class="note bad"><b>Watch out.</b> The VPC dropdown defaults to the default VPC, and neither VPC nor port can be edited later. A wrong one means delete and recreate.</div>
+      </div>
+
+      <label class="task"><input type="checkbox" data-id="5.3"><span>Create the internal load balancer</span></label>
+      <p class="path">EC2 → Load balancers → Create → Application Load Balancer</p>
+      <div class="body"><ul>
+        <li>Name: <code>ecommerce-internal-alb</code>, scheme <b>Internal</b>, IPv4</li>
+        <li>VPC <code>ecommerce-vpc</code>; in each zone pick the <b>private ECS</b> subnet</li>
+        <li>Security group: <code>ecommerce-alb-sg</code> only</li>
+        <li>Listener HTTP:80, default action forward to <code>product-service-tg</code></li>
+      </ul>
+      <p>Copy the <b>DNS name</b> into the worksheet.</p></div>
+
+      <label class="task"><input type="checkbox" data-id="5.4"><span>Add four listener rules</span></label>
+      <p class="path">The load balancer → Listeners and rules → click <b>HTTP:80</b> → Add rule</p>
+      <div class="body">
+        <div class="table-wrap"><table>
+          <tr><th>Priority</th><th>Condition: Path</th><th>Forward to</th></tr>
+          <tr><td>1</td><td><code>/products*</code></td><td><code>product-service-tg</code></td></tr>
+          <tr><td>2</td><td><code>/cart*</code></td><td><code>cart-service-tg</code></td></tr>
+          <tr><td>3</td><td><code>/users*</code></td><td><code>user-service-tg</code></td></tr>
+          <tr><td>4</td><td><code>/orders*</code></td><td><code>order-service-tg</code></td></tr>
+        </table></div>
+        <div class="note warn"><b>Watch out.</b> Click the HTTP:80 link itself. The “Add listener” button creates a second listener on another port, which is not what you want.</div>
+      </div>
+
+      <label class="task"><input type="checkbox" data-id="5.5"><span>Create three service-URL parameters</span></label>
+      <p class="path">Systems Manager → Parameter Store → Create parameter (type String)</p>
+      <div class="body">
+        <p>All three get the same value:</p>
+        <div class="cmd"><pre><code>http://<var data-v="albDns">&lt;alb-dns-name&gt;</var></code></pre></div>
+        <ul>
+          <li><code>/ecommerce/dev/user-service-url</code></li>
+          <li><code>/ecommerce/dev/cart-service-url</code></li>
+          <li><code>/ecommerce/dev/product-service-url</code></li>
+        </ul>
+      </div>
+
+      <label class="task"><input type="checkbox" data-id="5.6"><span>Create four ECR repositories</span></label>
+      <p class="path">ECR → Private repositories → Create repository</p>
+      <div class="body"><ul>
+        <li><code>ecommerce/product-service</code></li>
+        <li><code>ecommerce/cart-service</code></li>
+        <li><code>ecommerce/user-service</code></li>
+        <li><code>ecommerce/order-service</code></li>
+      </ul>
+      <p>Leave tag mutability on Mutable and encryption on AES-256.</p></div>
+
+      <label class="task"><input type="checkbox" data-id="5.7"><span>Build and push the images</span></label>
+      <div class="body">
+        <p>From the repo root:</p>
+        <div class="cmd"><pre><code>sudo systemctl start docker
+REG=<var data-v="registry">&lt;account-id&gt;.dkr.ecr.&lt;region&gt;.amazonaws.com</var>
+aws ecr get-login-password | docker login --username AWS --password-stdin $REG
+
+for SVC in product-service cart-service user-service order-service; do
+  docker build -t ecommerce/$SVC services/$SVC
+  docker tag ecommerce/$SVC:latest $REG/ecommerce/$SVC:latest
+  docker push $REG/ecommerce/$SVC:latest
+done</code></pre></div>
+        <p>On an Intel or AMD machine the images are <code>amd64</code>, which matches <b>Linux/X86_64</b> in the task definitions. On an ARM machine choose Linux/ARM64 there instead.</p>
+      </div>
+
+      <label class="task"><input type="checkbox" data-id="5.8"><span>Create the task role</span></label>
+      <p class="path">IAM → Roles → Create role → AWS service → Elastic Container Service</p>
+      <div class="body">
+        <ul>
+          <li>Use case: <b>Elastic Container Service Task</b> (“Allows ECS tasks to call AWS services on your behalf”)</li>
+          <li>Attach: <code>AmazonDynamoDBFullAccess_v2</code>, <code>AmazonSSMReadOnlyAccess</code>, <code>CloudWatchLogsFullAccess</code>, <code>AmazonS3ReadOnlyAccess</code>, <code>AmazonSNSFullAccess</code></li>
+          <li>Role name: <code>ecommerce-ecs-task-role</code></li>
+        </ul>
+        <div class="note bad"><b>Watch out.</b> Two traps on the permissions page. Picking the plain “Elastic Container Service” use case locks the role to one fixed policy. And the list at the bottom is for a <b>permissions boundary</b>: leave it on “Create role without a permissions boundary”, or the role is capped to whatever you tick there. The review page must show five permissions policies and no boundary line.</div>
+      </div>
+
+      <label class="task"><input type="checkbox" data-id="5.9"><span>Create the ECS security group</span></label>
+      <p class="path">VPC → Security groups → Create</p>
+      <div class="body"><ul>
+        <li>Name: <code>ecommerce-ecs-sg</code>, VPC <code>ecommerce-vpc</code></li>
+        <li>Four inbound rules, Custom TCP <code>8001</code>, <code>8002</code>, <code>8003</code>, <code>8004</code>, each with source <code>ecommerce-alb-sg</code></li>
+      </ul></div>
+
+      <label class="task"><input type="checkbox" data-id="5.10"><span>Create four task definitions</span></label>
+      <p class="path">ECS → Task definitions → Create new task definition</p>
+      <div class="body">
+        <div class="table-wrap"><table>
+          <tr><th>Field</th><th>Value for all four</th></tr>
+          <tr><td>Launch type, OS</td><td>AWS Fargate, Linux/X86_64</td></tr>
+          <tr><td>Task size</td><td>.25 vCPU, .5 GB</td></tr>
+          <tr><td>Task role</td><td><code>ecommerce-ecs-task-role</code></td></tr>
+          <tr><td>Task execution role</td><td>“Create new role” on the first; <code>ecsTaskExecutionRole</code> on the rest</td></tr>
+          <tr><td>Environment variables</td><td><code>ENVIRONMENT</code> = <code>dev</code>, <code>AWS_REGION</code> = <var data-v="region">&lt;region&gt;</var></td></tr>
+          <tr><td>Logging</td><td>Leave log collection on with the defaults</td></tr>
+        </table></div>
+        <div class="table-wrap"><table>
+          <tr><th>Family</th><th>Container name</th><th>Port</th><th>Image URI</th></tr>
+          <tr><td><code>ecommerce-product-service</code></td><td><code>product-service</code></td><td>8001</td><td><var data-v="registry">&lt;registry&gt;</var>/ecommerce/product-service:latest</td></tr>
+          <tr><td><code>ecommerce-cart-service</code></td><td><code>cart-service</code></td><td>8002</td><td><var data-v="registry">&lt;registry&gt;</var>/ecommerce/cart-service:latest</td></tr>
+          <tr><td><code>ecommerce-user-service</code></td><td><code>user-service</code></td><td>8003</td><td><var data-v="registry">&lt;registry&gt;</var>/ecommerce/user-service:latest</td></tr>
+          <tr><td><code>ecommerce-order-service</code></td><td><code>order-service</code></td><td>8004</td><td><var data-v="registry">&lt;registry&gt;</var>/ecommerce/order-service:latest</td></tr>
+        </table></div>
+        <div class="note warn"><b>Watch out.</b> The family name is pre-filled with a random name and the container port with 80. Change both.</div>
+      </div>
+
+      <label class="task"><input type="checkbox" data-id="5.11"><span>Let the execution role create log groups</span></label>
+      <p class="path">IAM → Roles → <code>ecsTaskExecutionRole</code> → Add permissions → Attach policies</p>
+      <div class="body">
+        <p>Attach <code>CloudWatchLogsFullAccess</code>.</p>
+        <div class="note bad"><b>Watch out.</b> The task definitions ask ECS to create the log group, and the default execution role cannot. Skip this and every task fails at startup with a logging error.</div>
+      </div>
+
+      <label class="task"><input type="checkbox" data-id="5.12"><span>Create the cluster</span></label>
+      <p class="path">ECS → Clusters → Create cluster</p>
+      <div class="body">
+        <ul><li>Name: <code>ecommerce-cluster</code>, infrastructure <b>Fargate only</b></li></ul>
+        <div class="note"><b>First time in an account.</b> “Unable to assume the service linked role” means AWS is still creating <code>AWSServiceRoleForECS</code>. Wait a minute and create the cluster again.</div>
+      </div>
+
+      <label class="task"><input type="checkbox" data-id="5.13"><span>Create four services</span></label>
+      <p class="path">The cluster → Services → Create</p>
+      <div class="body">
+        <div class="table-wrap"><table>
+          <tr><th>Field</th><th>Value</th></tr>
+          <tr><td>Task definition and service name</td><td>The family, for example <code>ecommerce-product-service</code></td></tr>
+          <tr><td>Compute</td><td>Launch type → Fargate; desired tasks 1</td></tr>
+          <tr><td>VPC and subnets</td><td><code>ecommerce-vpc</code>; only the two <b>private ECS</b> subnets</td></tr>
+          <tr><td>Security group</td><td>Existing: <code>ecommerce-ecs-sg</code> only</td></tr>
+          <tr><td>Public IP</td><td><b>Off</b></td></tr>
+          <tr><td>Load balancing</td><td>Application Load Balancer → existing <code>ecommerce-internal-alb</code> → existing listener HTTP:80 → <b>existing target group</b> for this service</td></tr>
+        </table></div>
+        <div class="note bad"><b>Watch out.</b> Do not skip the load balancing section. A service created without it runs but its target group stays empty, so nothing can reach it.</div>
+      </div>
+
+      <label class="task"><input type="checkbox" data-id="5.14"><span>Verify from the terminal</span></label>
+      <div class="body">
+        <p>Give the tasks two to three minutes to start.</p>
+        <div class="cmd"><pre><code>aws ecs describe-services --cluster ecommerce-cluster \
+  --services ecommerce-product-service ecommerce-cart-service ecommerce-user-service ecommerce-order-service \
+  --query 'services[].[serviceName,runningCount,length(loadBalancers)]' --output table
+for T in product cart user order; do
+  A=$(aws elbv2 describe-target-groups --names $T-service-tg --query 'TargetGroups[0].TargetGroupArn' --output text)
+  echo "$T: $(aws elbv2 describe-target-health --target-group-arn $A --query 'TargetHealthDescriptions[].TargetHealth.State' --output text)"
+done</code></pre></div>
+        <div class="note ok"><b>Expect.</b> Each service with 1 running task and 1 load balancer, and each target group <code>healthy</code>. If a task keeps stopping, read its log group <code>/ecs/ecommerce-&lt;service&gt;</code> in CloudWatch.</div>
+      </div>
+    </section>
+
+    <!-- ============ Module 6 ============ -->
+    <section class="card module" id="m6" data-title="API Gateway">
+      <div class="module-head">
+        <span class="num">6</span><h2>API Gateway</h2>
+        <div class="chips"><span class="chip">30–45 min</span><span class="chip">VPC, API Gateway</span></div>
+      </div>
+      <p class="goal">The one public entry point to the backend: an HTTP API that checks the Cognito token and reaches the internal load balancer through a VPC link.</p>
+
+      <label class="task"><input type="checkbox" data-id="6.1"><span>Create the VPC link security group</span></label>
+      <p class="path">VPC → Security groups → Create</p>
+      <div class="body"><ul>
+        <li>Name: <code>ecommerce-vpclink-sg</code>, VPC <code>ecommerce-vpc</code></li>
+        <li>Inbound: HTTP (80) and HTTPS (443) from <code>0.0.0.0/0</code></li>
+      </ul></div>
+
+      <label class="task"><input type="checkbox" data-id="6.2"><span>Create the VPC link</span></label>
+      <p class="path">API Gateway → VPC links → Create</p>
+      <div class="body">
+        <ul>
+          <li>Version: <b>VPC link V2</b></li>
+          <li>Name: <code>ecommerce-vpc-link</code>, VPC <code>ecommerce-vpc</code></li>
+          <li>Subnets: both private ECS subnets; security group <code>ecommerce-vpclink-sg</code></li>
+        </ul>
+        <div class="note warn"><b>Watch out.</b> If the form asks for a “Target NLB”, the legacy version is selected. Switch to V2. Wait for status Available (5 to 10 minutes) before step 6.4.</div>
+      </div>
+
+      <label class="task"><input type="checkbox" data-id="6.3"><span>Create the HTTP API</span></label>
+      <p class="path">API Gateway → APIs → Create API → HTTP API → Build</p>
+      <div class="body"><ul>
+        <li>Name: <code>ecommerce-api</code>; skip integrations and routes; Create</li>
+        <li>Under Stages, make sure a <code>$default</code> stage exists with Auto-deploy on</li>
+      </ul>
+      <p>Copy the <b>Invoke URL</b> into the worksheet.</p></div>
+
+      <label class="task"><input type="checkbox" data-id="6.4"><span>Create the integration</span></label>
+      <p class="path">The API → Integrations → Manage integrations → Create</p>
+      <div class="body"><ul>
+        <li>Integration type: <b>Private resource</b> → ALB/NLB</li>
+        <li>Load balancer <code>ecommerce-internal-alb</code>, listener HTTP 80, VPC link <code>ecommerce-vpc-link</code></li>
+      </ul></div>
+
+      <label class="task"><input type="checkbox" data-id="6.5"><span>Create the JWT authorizer</span></label>
+      <p class="path">The API → Authorization → Manage authorizers → Create</p>
+      <div class="body">
+        <div class="table-wrap"><table>
+          <tr><th>Field</th><th>Value</th></tr>
+          <tr><td>Type, name</td><td>JWT, <code>cognito-jwt-authorizer</code></td></tr>
+          <tr><td>Identity source</td><td><code>$request.header.Authorization</code></td></tr>
+          <tr><td>Issuer URL</td><td>https://cognito-idp.<var data-v="region">&lt;region&gt;</var>.amazonaws.com/<var data-v="poolId">&lt;user-pool-id&gt;</var></td></tr>
+          <tr><td>Audience</td><td><var data-v="clientId">&lt;client-id&gt;</var></td></tr>
+        </table></div>
+      </div>
+
+      <label class="task"><input type="checkbox" data-id="6.6"><span>Create three routes and attach them</span></label>
+      <p class="path">The API → Routes → Create</p>
+      <div class="body">
+        <div class="table-wrap"><table>
+          <tr><th>Method</th><th>Path</th><th>Authorization</th></tr>
+          <tr><td>GET</td><td><code>/products</code></td><td>None</td></tr>
+          <tr><td>ANY</td><td><code>/{proxy+}</code></td><td><code>cognito-jwt-authorizer</code></td></tr>
+          <tr><td>OPTIONS</td><td><code>/{proxy+}</code></td><td>None</td></tr>
+        </table></div>
+        <div class="note bad"><b>Watch out.</b> Creating a route does not connect it to anything. Select each route and use <b>Attach integration</b>, and on the ANY route also <b>Attach authorization</b>.</div>
+      </div>
+
+      <label class="task"><input type="checkbox" data-id="6.7"><span>Configure CORS</span></label>
+      <p class="path">The API → CORS → Configure</p>
+      <div class="body"><ul>
+        <li>Access-Control-Allow-Origin: <code>*</code> (type it and click Add)</li>
+        <li>Access-Control-Allow-Headers: <code>*</code></li>
+        <li>Access-Control-Allow-Methods: GET, POST, PUT, DELETE, OPTIONS</li>
+      </ul></div>
+
+      <label class="task"><input type="checkbox" data-id="6.8"><span>Test the API</span></label>
+      <div class="body">
+        <div class="cmd"><pre><code>API=<var data-v="apiUrl">&lt;api-url&gt;</var>
+curl -s $API/products | jq length
+for P in cart users orders; do curl -s -o /dev/null -w "/$P %{http_code}\n" $API/$P; done
+curl -s -o /dev/null -D - -H "Origin: https://<var data-v="cfDomain">&lt;cloudfront-domain&gt;</var>" $API/products | grep -i access-control</code></pre></div>
+        <div class="note ok"><b>Expect.</b> 20, then 401 three times, then an <code>access-control-allow-origin</code> header. A 503 or 500 on <code>/products</code> usually means a route has no integration; a 504 means the load balancer or a security group.</div>
+      </div>
+    </section>
+
+    <!-- ============ Module 7 ============ -->
+    <section class="card module" id="m7" data-title="Connect the frontend">
+      <div class="module-head">
+        <span class="num">7</span><h2>Connect the frontend to the API</h2>
+        <div class="chips"><span class="chip">10 min</span><span class="chip">Terminal</span></div>
+      </div>
+      <p class="goal">Give the React app the API address, rebuild, redeploy, and use the whole site.</p>
+
+      <label class="task"><input type="checkbox" data-id="7.1"><span>Set the API URL, rebuild and upload</span></label>
+      <div class="body">
+        <p>From the repo root:</p>
+        <div class="cmd"><pre><code>cd frontend/react-app
+sed -i "s|^REACT_APP_API_BASE_URL=.*|REACT_APP_API_BASE_URL=<var data-v="apiUrl">&lt;api-url&gt;</var>|" .env
+npm run build
+aws s3 sync build/ s3://<var data-v="bucket">&lt;frontend-bucket&gt;</var> --delete --exclude "images/*"
+aws cloudfront create-invalidation --distribution-id <var data-v="cfId">&lt;distribution-id&gt;</var> --paths "/*"
+cd ../..</code></pre></div>
+        <div class="note warn"><b>Watch out.</b> Keep <code>--exclude "images/*"</code>. Without it, <code>--delete</code> removes the product images from the bucket.</div>
+      </div>
+
+      <label class="task"><input type="checkbox" data-id="7.2"><span>Test the site end to end</span></label>
+      <div class="body">
+        <p>Open <code>https://</code><var data-v="cfDomain">&lt;cloudfront-domain&gt;</var> and hard-refresh (Ctrl+Shift+R).</p>
+        <ol>
+          <li>Twenty products show without logging in.</li>
+          <li>Sign in and add a product to the cart.</li>
+          <li>Change the quantity in the cart, then place the order.</li>
+          <li>The order appears on the Orders page.</li>
+        </ol>
+        <p>Steps 2 to 4 are the first real test of the database password in Parameter Store.</p>
+      </div>
+    </section>
+
+    <!-- ============ Module 8 ============ -->
+    <section class="card module" id="m8" data-title="Notifications">
+      <div class="module-head">
+        <span class="num">8</span><h2>Order notifications</h2>
+        <div class="chips"><span class="chip">15 min</span><span class="chip">SNS, SQS, Parameter Store, ECS</span></div>
+      </div>
+      <p class="goal">Each new order is published to an SNS topic, which delivers it to an email address and to an SQS queue.</p>
+
+      <label class="task"><input type="checkbox" data-id="8.1"><span>Create the SNS topic</span></label>
+      <p class="path">SNS → Topics → Create topic</p>
+      <div class="body"><ul>
+        <li>Type: <b>Standard</b> (the form defaults to FIFO)</li>
+        <li>Name: <code>ecommerce-order-events</code>, display name <code>eCommerce Order Events</code></li>
+      </ul></div>
+
+      <label class="task"><input type="checkbox" data-id="8.2"><span>Create the SQS queue and subscribe it</span></label>
+      <p class="path">SQS → Create queue</p>
+      <div class="body"><ul>
+        <li>Type: Standard, name <code>ecommerce-order-shipping</code></li>
+        <li>On the queue page: <b>Subscribe to Amazon SNS topic</b> → <code>ecommerce-order-events</code></li>
+      </ul>
+      <p>Subscribing from the SQS side also adds the queue policy that lets SNS deliver to it.</p></div>
+
+      <label class="task"><input type="checkbox" data-id="8.3"><span>Add the email subscription</span></label>
+      <p class="path">SNS → the topic → Create subscription</p>
+      <div class="body"><ul>
+        <li>Protocol: Email, endpoint: your address</li>
+        <li>Open the email from AWS and click <b>Confirm subscription</b></li>
+      </ul></div>
+
+      <label class="task"><input type="checkbox" data-id="8.4"><span>Create the topic parameter</span></label>
+      <p class="path">Systems Manager → Parameter Store → Create parameter (String)</p>
+      <div class="body">
+        <p>Name <code>/ecommerce/dev/sns/topic-arn</code>, value:</p>
+        <div class="cmd"><pre><code>arn:aws:sns:<var data-v="region">&lt;region&gt;</var>:<var data-v="account">&lt;account-id&gt;</var>:ecommerce-order-events</code></pre></div>
+      </div>
+
+      <label class="task"><input type="checkbox" data-id="8.5"><span>Restart the order service</span></label>
+      <div class="body">
+        <p>It reads parameters only at startup.</p>
+        <div class="cmd"><pre><code>aws ecs update-service --cluster ecommerce-cluster --service ecommerce-order-service --force-new-deployment --query 'service.serviceName'
+aws ecs wait services-stable --cluster ecommerce-cluster --services ecommerce-order-service &amp;&amp; echo ready</code></pre></div>
+        <p>Or in the console: the cluster → tick the service → Update → Force new deployment.</p>
+      </div>
+
+      <label class="task"><input type="checkbox" data-id="8.6"><span>Place an order and verify</span></label>
+      <div class="body">
+        <div class="cmd"><pre><code>aws sns list-subscriptions-by-topic --topic-arn arn:aws:sns:<var data-v="region">&lt;region&gt;</var>:<var data-v="account">&lt;account-id&gt;</var>:ecommerce-order-events \
+  --query 'Subscriptions[].[Protocol,SubscriptionArn]' --output table
+Q=$(aws sqs get-queue-url --queue-name ecommerce-order-shipping --query QueueUrl --output text)
+aws sqs get-queue-attributes --queue-url $Q --attribute-names ApproximateNumberOfMessages --query Attributes</code></pre></div>
+        <div class="note ok"><b>Expect.</b> Two confirmed subscriptions (no “PendingConfirmation”), an email within a minute of placing an order, and the queue’s message count going up by one.</div>
+      </div>
+    </section>
+
+    <!-- ============ Cleanup ============ -->
+    <section class="card module" id="m10" data-title="Cleanup">
+      <div class="module-head">
+        <span class="num">10</span><h2>Cleanup</h2>
+        <div class="chips"><span class="chip">20–30 min</span><span class="chip">All consoles</span></div>
+      </div>
+      <p class="goal">Delete everything in reverse order. The hourly-billed resources go early; the VPC goes last because everything else lives in it. (Module 9, custom domain, is optional and not part of this run.)</p>
+
+      <label class="task"><input type="checkbox" data-id="10.1"><span>Notifications</span></label>
+      <div class="body"><ul>
+        <li>SNS → Subscriptions → delete both</li>
+        <li>SNS → Topics → delete <code>ecommerce-order-events</code></li>
+        <li>SQS → delete <code>ecommerce-order-shipping</code></li>
+      </ul></div>
+
+      <label class="task"><input type="checkbox" data-id="10.2"><span>API Gateway</span></label>
+      <div class="body"><ul>
+        <li>API Gateway → APIs → delete <code>ecommerce-api</code></li>
+        <li>API Gateway → VPC links → delete <code>ecommerce-vpc-link</code></li>
+      </ul>
+      <p>The VPC link takes a few minutes to release its network interfaces. The VPC cannot be deleted until it has.</p></div>
+
+      <label class="task"><input type="checkbox" data-id="10.3"><span>ECS services, cluster and task definitions</span></label>
+      <div class="body">
+        <ul>
+          <li>ECS → <code>ecommerce-cluster</code> → Services → delete all four (tick “Force delete”)</li>
+          <li>When no tasks remain: delete the cluster</li>
+          <li>Task definitions → each family → select all revisions → Deregister</li>
+        </ul>
+        <p>Or from the terminal:</p>
+        <div class="cmd"><pre><code>for S in product cart user order; do
+  aws ecs delete-service --cluster ecommerce-cluster --service ecommerce-$S-service --force --query 'service.status' --output text
+done
+aws ecs wait services-inactive --cluster ecommerce-cluster \
+  --services ecommerce-product-service ecommerce-cart-service ecommerce-user-service ecommerce-order-service
+aws ecs delete-cluster --cluster ecommerce-cluster --query 'cluster.status' --output text</code></pre></div>
+      </div>
+
+      <label class="task"><input type="checkbox" data-id="10.4"><span>Load balancer and target groups</span></label>
+      <div class="body"><ul>
+        <li>EC2 → Load balancers → delete <code>ecommerce-internal-alb</code></li>
+        <li>EC2 → Target groups → delete all four (after the load balancer is gone)</li>
+      </ul></div>
+
+      <label class="task"><input type="checkbox" data-id="10.5"><span>ECR repositories</span></label>
+      <div class="body"><p>ECR → select the four <code>ecommerce/…</code> repositories → Delete. This removes the images too.</p></div>
+
+      <label class="task"><input type="checkbox" data-id="10.6"><span>RDS</span></label>
+      <div class="body"><ul>
+        <li>RDS → Databases → <code>ecommercedb-instance</code> → Actions → Delete</li>
+        <li>Untick “Create final snapshot” and “Retain automated backups”, tick the acknowledgement</li>
+        <li>After it is gone (several minutes): Subnet groups → delete <code>ecommerce-db-subnet-group</code></li>
+      </ul></div>
+
+      <label class="task"><input type="checkbox" data-id="10.7"><span>DynamoDB and Parameter Store</span></label>
+      <div class="body"><ul>
+        <li>DynamoDB → Tables → delete <code>ecommerce-products</code> and <code>ecommerce-cart</code></li>
+        <li>Parameter Store → delete all seven <code>/ecommerce/dev/…</code> parameters</li>
+      </ul></div>
+
+      <label class="task"><input type="checkbox" data-id="10.8"><span>CloudFront and S3</span></label>
+      <div class="body"><ul>
+        <li>CloudFront → the distribution → <b>Disable</b>, wait until it finishes deploying, then <b>Delete</b></li>
+        <li>S3 → the frontend bucket → <b>Empty</b>, then <b>Delete</b></li>
+        <li>CloudFront → Origin access → delete the leftover origin access control</li>
+      </ul></div>
+
+      <label class="task"><input type="checkbox" data-id="10.9"><span>Cognito</span></label>
+      <div class="body"><p>Cognito → the user pool → Delete. If it refuses, first delete its domain under Branding → Domain and turn off deletion protection in the pool settings.</p></div>
+
+      <label class="task"><input type="checkbox" data-id="10.10"><span>IAM roles and log groups</span></label>
+      <div class="body"><ul>
+        <li>IAM → Roles → delete <code>ecommerce-ecs-task-role</code> and <code>ecsTaskExecutionRole</code></li>
+        <li>CloudWatch → Log groups → delete the four <code>/ecs/ecommerce-…</code> groups</li>
+      </ul>
+      <p>Leave <code>AWSServiceRoleForECS</code>; it is managed by AWS and costs nothing.</p></div>
+
+      <label class="task"><input type="checkbox" data-id="10.11"><span>NAT gateway and Elastic IP</span></label>
+      <div class="body"><ul>
+        <li>VPC → NAT gateways → delete <code>ecommerce-nat-gateway</code>, wait for state Deleted</li>
+        <li>VPC → Elastic IPs → select the address → <b>Release</b></li>
+      </ul>
+      <div class="note warn"><b>Watch out.</b> An Elastic IP that is not attached to anything still bills by the hour. Release it.</div></div>
+
+      <label class="task"><input type="checkbox" data-id="10.12"><span>The VPC</span></label>
+      <div class="body"><p>VPC → Your VPCs → <code>ecommerce-vpc</code> → Actions → Delete VPC. This also removes its subnets, route tables, internet gateway and security groups. If it reports a dependency, something above is still deleting; wait a few minutes and try again.</p></div>
+
+      <label class="task"><input type="checkbox" data-id="10.13"><span>Confirm nothing is left</span></label>
+      <div class="body">
+        <div class="cmd"><pre><code>echo "NAT:      $(aws ec2 describe-nat-gateways --filter Name=state,Values=available,pending --query 'length(NatGateways)')"
+echo "EIPs:     $(aws ec2 describe-addresses --query 'length(Addresses)')"
+echo "RDS:      $(aws rds describe-db-instances --query 'length(DBInstances)')"
+echo "ALBs:     $(aws elbv2 describe-load-balancers --query 'length(LoadBalancers)')"
+echo "Clusters: $(aws ecs list-clusters --query 'length(clusterArns)')"
+echo "VPCs:     $(aws ec2 describe-vpcs --filters Name=tag:Name,Values=ecommerce-vpc --query 'length(Vpcs)')"
+echo "Tables:   $(aws dynamodb list-tables --query 'length(TableNames)')"
+echo "APIs:     $(aws apigatewayv2 get-apis --query 'length(Items)')"
+echo "Buckets:  $(aws s3api list-buckets --query 'length(Buckets[?contains(Name,`ecommerce`)])')"</code></pre></div>
+        <div class="note ok"><b>Expect.</b> Zero on every line. Check the Billing console a day later: cost data lags by up to 24 hours.</div>
+      </div>
+    </section>
+
+    <!-- ============ Troubleshooting ============ -->
+    <section class="card" id="trouble">
+      <div class="module-head"><h2>If something does not work</h2></div>
+      <div class="table-wrap" style="margin-top:14px"><table>
+        <tr><th>Symptom</th><th>Most likely cause</th><th>Where to look</th></tr>
+        <tr><td>ECS task stops right after starting</td><td>Cannot pull the image (ECS route table not on the NAT gateway) or cannot create its log group</td><td>The stopped task’s “Stopped reason”; steps 1.5 and 5.11</td></tr>
+        <tr><td>Target group shows no targets</td><td>The ECS service was created without load balancing</td><td>Step 5.13; update the service and attach the target group</td></tr>
+        <tr><td>Target unhealthy</td><td>Wrong container port, or <code>ecommerce-ecs-sg</code> does not allow the port from <code>ecommerce-alb-sg</code></td><td>Steps 5.9 and 5.10</td></tr>
+        <tr><td>API returns 401 with a valid login</td><td>Authorizer issuer URL or audience does not match the user pool and client</td><td>Step 6.5</td></tr>
+        <tr><td>API returns 503 or 500</td><td>Route without an integration, or VPC link not Available</td><td>Steps 6.2 and 6.6</td></tr>
+        <tr><td>API returns 504</td><td>Load balancer cannot be reached or targets unhealthy</td><td>Steps 5.14 and 6.1</td></tr>
+        <tr><td>Browser console shows a CORS error</td><td>CORS not saved on the API</td><td>Step 6.7</td></tr>
+        <tr><td>Cart or orders fail after login</td><td>Wrong database host or password in Parameter Store, or the initial database name was missed</td><td>Steps 4.6 and 4.7; logs in <code>/ecs/ecommerce-user-service</code></td></tr>
+        <tr><td>Order works but no email</td><td>Subscription not confirmed, or order service not restarted after adding the parameter</td><td>Steps 8.3 and 8.5</td></tr>
+        <tr><td>Site still shows the old version</td><td>CloudFront cache</td><td>Run the invalidation in step 7.1 and hard-refresh</td></tr>
+      </table></div>
+    </section>
+  </main>
+</div>
+
+<script>
+(function () {
+  const STORE = "ecommerce-deploy-guide";
+  // Values that change on every rebuild; cleared by "Start a new run"
+  const RUN_VARS = ["bucket", "cfDomain", "cfId", "poolId", "clientId", "rds", "albDns", "apiUrl"];
+  let state = { vars: { region: "ap-south-1" }, done: {} };
+  try { state = Object.assign(state, JSON.parse(localStorage.getItem(STORE)) || {}); } catch (e) {}
+  const save = () => { try { localStorage.setItem(STORE, JSON.stringify(state)); } catch (e) {} };
+
+  const value = name => {
+    const v = state.vars;
+    if (name === "registry") return v.account && v.region ? v.account + ".dkr.ecr." + v.region + ".amazonaws.com" : "";
+    return (v[name] || "").trim();
+  };
+
+  // Fill worksheet values into every <var>
+  const placeholders = new Map();
+  function renderVars() {
+    document.querySelectorAll("var[data-v]").forEach(el => {
+      if (!placeholders.has(el)) placeholders.set(el, el.textContent);
+      const v = value(el.dataset.v);
+      el.textContent = v || placeholders.get(el);
+      el.classList.toggle("empty", !v);
+    });
+  }
+
+  document.querySelectorAll("input[data-var]").forEach(input => {
+    input.value = state.vars[input.dataset.var] || "";
+    input.addEventListener("input", () => { state.vars[input.dataset.var] = input.value; save(); renderVars(); });
+  });
+
+  // Copy buttons
+  document.querySelectorAll(".cmd").forEach(block => {
+    const btn = document.createElement("button");
+    btn.className = "copy"; btn.type = "button"; btn.textContent = "Copy";
+    btn.onclick = () => {
+      const text = block.querySelector("pre").textContent;
+      (navigator.clipboard ? navigator.clipboard.writeText(text) : Promise.reject()).then(
+        () => { btn.textContent = "Copied"; setTimeout(() => (btn.textContent = "Copy"), 1500); },
+        () => { btn.textContent = "Select and copy"; });
+    };
+    block.appendChild(btn);
+  });
+
+  // Checkboxes, sidebar and progress
+  const boxes = [...document.querySelectorAll(".task input[data-id]")];
+  const modules = [...document.querySelectorAll("section.module")];
+  const toc = document.getElementById("toc");
+  const links = modules.map(section => {
+    const a = document.createElement("a");
+    a.href = "#" + section.id;
+    a.innerHTML = "<span></span><span class='count'></span>";
+    a.firstChild.textContent = section.querySelector(".num").textContent + ". " + section.dataset.title;
+    toc.appendChild(a);
+    return a;
+  });
+
+  function renderProgress() {
+    let total = 0, done = 0;
+    modules.forEach((section, i) => {
+      const own = [...section.querySelectorAll(".task input[data-id]")];
+      const ownDone = own.filter(b => b.checked).length;
+      total += own.length; done += ownDone;
+      links[i].lastChild.textContent = ownDone + "/" + own.length;
+      links[i].classList.toggle("done", own.length > 0 && ownDone === own.length);
+    });
+    document.getElementById("bar").style.width = (total ? (100 * done) / total : 0) + "%";
+    document.getElementById("progressLabel").textContent = done + " of " + total + " steps done";
+  }
+
+  boxes.forEach(box => {
+    box.checked = !!state.done[box.dataset.id];
+    box.addEventListener("change", () => { state.done[box.dataset.id] = box.checked; save(); renderProgress(); });
+  });
+
+  document.getElementById("btnReset").onclick = () => {
+    if (!confirm("Clear all ticks and the values from this run? Profile, region and account ID are kept.")) return;
+    state.done = {};
+    RUN_VARS.forEach(name => delete state.vars[name]);
+    save();
+    boxes.forEach(box => (box.checked = false));
+    document.querySelectorAll("input[data-var]").forEach(input => (input.value = state.vars[input.dataset.var] || ""));
+    renderVars(); renderProgress();
+    window.scrollTo(0, 0);
+  };
+
+  renderVars(); renderProgress();
+})();
+</script>
+</html>

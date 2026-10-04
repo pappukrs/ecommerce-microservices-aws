@@ -70,9 +70,9 @@
 
 <main>
   <header>
-    <div class="tag">Let's Build on AWS · ap-south-1 (Mumbai)</div>
+    <div class="tag">AWS · ap-south-1 (Mumbai)</div>
     <h1>Ecommerce AWS Architecture</h1>
-    <p class="lead">Everything you will create by hand across modules 1 to 8, on one drawing. Press “Build module by module” to watch it appear in the same order you will build it in the console.</p>
+    <p class="lead">A microservices ecommerce application deployed by hand on AWS, across eight modules, on one drawing. Press “Build module by module” to watch it appear in the order it was built in the console.</p>
   </header>
 
   <h2>The full setup</h2>
@@ -86,7 +86,7 @@
       <span class="stepname" id="stepName"></span>
     </div>
     <div class="diagram-wrap">
-      <svg viewBox="0 0 1290 824" role="img" aria-label="Ecommerce architecture: users reach a React site through CloudFront and S3, sign in with Cognito, and call API Gateway, which goes through a VPC Link to an internal load balancer and four Fargate services in private subnets. The services use RDS PostgreSQL inside the VPC and reach DynamoDB, Parameter Store, ECR, CloudWatch and SNS through a NAT gateway.">
+      <svg viewBox="0 0 1290 824" role="img" aria-label="Ecommerce architecture: users reach a React site through CloudFront and S3, sign in with Cognito, and call API Gateway, which goes through a VPC Link to an internal load balancer and four Fargate services in private subnets. The services use RDS PostgreSQL inside the VPC and reach DynamoDB, Parameter Store, ECR, CloudWatch and SNS through a NAT gateway. The Fargate tasks assume two IAM roles.">
         <defs>
           <marker id="arr" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M0 1 L10 5 L0 9 z" fill="#232F3E"/></marker>
           <!-- Official AWS Architecture Icons (aws-icons 3.3.0) -->
@@ -169,7 +169,7 @@
           <text x="54" y="290" font-size="12" text-anchor="middle">Users</text>
           <use href="#i-cognito" x="296" y="226" width="48" height="48"/>
           <text x="320" y="290" font-size="12" text-anchor="middle">Amazon Cognito</text>
-          <text x="320" y="304" font-size="10.5" text-anchor="middle" class="mut">user pool: ecommerce-app</text>
+          <text x="320" y="304" font-size="10.5" text-anchor="middle" class="mut">user pool + app client</text>
           <line x1="82" y1="250" x2="294" y2="250" stroke="#232F3E" stroke-width="1.5" marker-end="url(#arr)"/>
           <circle cx="215" cy="250" r="9" fill="#232F3E"/><text x="215" y="254" font-size="11" font-weight="700" text-anchor="middle" style="fill:#fff">2</text>
         </g>
@@ -192,7 +192,7 @@
         <g data-step="4">
           <use href="#i-rds" x="648" y="672" width="44" height="44"/>
           <text x="640" y="692" font-size="11.5" text-anchor="end">Amazon RDS for PostgreSQL</text>
-          <text x="640" y="706" font-size="10.5" text-anchor="end" class="mut">ecommercedb, port 5432</text>
+          <text x="640" y="706" font-size="10.5" text-anchor="end" class="mut">db.t4g.micro, single-AZ, :5432</text>
 
           <rect x="1030" y="100" width="214" height="344" fill="none" stroke="#7D8998" stroke-width="1.2" stroke-dasharray="6 4"/>
           <text x="1137" y="118" font-size="11.5" text-anchor="middle" style="fill:#5F6B7A">AWS services outside the VPC</text>
@@ -246,12 +246,18 @@
           <circle cx="650" cy="326" r="9" fill="#232F3E"/><text x="650" y="330" font-size="11" font-weight="700" text-anchor="middle" style="fill:#fff">7</text>
           <text x="900" y="59" font-size="10.5" text-anchor="middle" class="mut">AWS API calls, image pulls, logs</text>
 
+          <rect x="112" y="500" width="120" height="76" rx="6" fill="#fff" stroke="#DD344C" stroke-width="1.2"/>
+          <text x="172" y="520" font-size="11.5" text-anchor="middle" style="fill:#B0283C">IAM roles</text>
+          <text x="172" y="538" font-size="10.5" text-anchor="middle" class="mut">ECS task role</text>
+          <text x="172" y="552" font-size="10.5" text-anchor="middle" class="mut">task execution role</text>
+          <text x="172" y="566" font-size="10.5" text-anchor="middle" class="mut">assumed by the tasks</text>
+
           <use href="#i-ecr" x="1062" y="138" width="44" height="44"/>
           <text x="1084" y="198" font-size="11.5" text-anchor="middle">Amazon ECR</text>
           <text x="1084" y="212" font-size="10.5" text-anchor="middle" class="mut">4 repositories</text>
           <use href="#i-cw" x="1168" y="138" width="44" height="44"/>
           <text x="1190" y="198" font-size="11.5" text-anchor="middle">CloudWatch Logs</text>
-          <text x="1190" y="212" font-size="10.5" text-anchor="middle" class="mut">/ecs/&lt;service&gt;</text>
+          <text x="1190" y="212" font-size="10.5" text-anchor="middle" class="mut">/ecs/ecommerce-*</text>
         </g>
 
         <!-- Module 6: API Gateway -->
@@ -352,14 +358,14 @@
   <h2>Build order</h2>
   <div class="card table-wrap">
     <table>
-      <tr><th>Module</th><th>You create</th><th>Check before moving on</th></tr>
+      <tr><th>Module</th><th>What was created</th><th>Verified by</th></tr>
       <tr><td>1. Networking</td><td>VPC, internet gateway, 6 subnets, NAT gateway with Elastic IP, 3 route tables</td><td>NAT gateway is Available; each route table has its 2 subnets</td></tr>
-      <tr><td>2. Cognito</td><td>User pool and app client, both named <code>ecommerce-app</code></td><td>You saved the user pool ID and client ID</td></tr>
-      <tr><td>3. Frontend</td><td>S3 bucket <code>ecommerce-frontend-…</code>, CloudFront distribution with OAC</td><td>The CloudFront URL shows the site and login works</td></tr>
-      <tr><td>4. Data layer</td><td>DynamoDB <code>ecommerce-products</code> and <code>ecommerce-cart</code>, RDS <code>ecommercedb-instance</code>, <code>ecommerce-rds-sg</code>, 3 parameters</td><td>20 products in the table; RDS is Available</td></tr>
-      <tr><td>5. Backend</td><td>Internal ALB with 4 target groups, 3 service-URL parameters, 4 ECR repositories and images, task role, <code>ecommerce-alb-sg</code> and <code>ecommerce-ecs-sg</code>, <code>ecommerce-cluster</code> with 4 services</td><td>All 4 target groups show healthy</td></tr>
+      <tr><td>2. Cognito</td><td>User pool with email sign-in, and the app client <code>ecommerce-app</code> (no client secret; password, SRP and refresh-token flows)</td><td>Sign-up, email verification and login work from the site</td></tr>
+      <tr><td>3. Frontend</td><td>Private S3 bucket <code>ecommerce-frontend-…</code>, CloudFront distribution with OAC, default root object, and 403/404 mapped to <code>/index.html</code> for client-side routing</td><td>The CloudFront URL shows the site; a deep link such as <code>/orders</code> loads</td></tr>
+      <tr><td>4. Data layer</td><td>DynamoDB <code>ecommerce-products</code> and <code>ecommerce-cart</code> (on-demand), DB subnet group, RDS <code>ecommercedb-instance</code>, <code>ecommerce-rds-sg</code>, 3 parameters, 20 product images in S3</td><td>20 products in the table; RDS is Available</td></tr>
+      <tr><td>5. Backend</td><td>Internal ALB with 4 target groups and 4 path rules, 3 service-URL parameters, 4 ECR repositories and images, task role and task execution role, <code>ecommerce-alb-sg</code> and <code>ecommerce-ecs-sg</code>, 4 task definitions, <code>ecommerce-cluster</code> with 4 services</td><td>All 4 target groups show healthy</td></tr>
       <tr><td>6. API Gateway</td><td><code>ecommerce-vpc-link</code>, HTTP API <code>ecommerce-api</code>, JWT authorizer, 3 routes, CORS</td><td><code>/products</code> returns 200; <code>/cart</code> returns 401 without a token</td></tr>
-      <tr><td>7. Integration</td><td>Fill in <code>aws-config.js</code>, rebuild, upload to S3, invalidate CloudFront</td><td>You can add to cart and place an order</td></tr>
+      <tr><td>7. Integration</td><td>Cognito IDs and API URL set in the frontend <code>.env</code>, rebuild, upload to S3, invalidate CloudFront</td><td>Add to cart and place an order while signed in</td></tr>
       <tr><td>8. Notifications</td><td>SNS topic, SQS queue, email and SQS subscriptions, 1 parameter, restart order-service</td><td>An order produces an email and a queue message</td></tr>
     </table>
   </div>
@@ -409,6 +415,39 @@
       <p style="margin:10px 0 0;color:var(--muted);font-size:14px">Every target group health check uses <code>/health</code>.</p>
     </div>
     <div class="card table-wrap">
+      <h3>IAM roles</h3>
+      <table>
+        <tr><th>Role</th><th>Used for</th></tr>
+        <tr><td><code>ecommerce-ecs-task-role</code></td><td>The running containers: DynamoDB, Parameter Store (read), SNS, S3 (read), CloudWatch Logs</td></tr>
+        <tr><td><code>ecsTaskExecutionRole</code></td><td>ECS itself: pull images from ECR, create log groups and write logs</td></tr>
+        <tr><td><code>AWSServiceRoleForECS</code></td><td>Service-linked role, created by AWS on first use of ECS</td></tr>
+      </table>
+    </div>
+    <div class="card table-wrap">
+      <h3>Parameter Store</h3>
+      <table>
+        <tr><th>Name</th><th>Read by</th></tr>
+        <tr><td><code>/ecommerce/dev/aws/region</code></td><td>All services</td></tr>
+        <tr><td><code>/ecommerce/dev/db/host</code></td><td>user, order</td></tr>
+        <tr><td><code>/ecommerce/dev/db/password</code></td><td>user, order</td></tr>
+        <tr><td><code>/ecommerce/dev/product-service-url</code></td><td>order</td></tr>
+        <tr><td><code>/ecommerce/dev/cart-service-url</code></td><td>order</td></tr>
+        <tr><td><code>/ecommerce/dev/user-service-url</code></td><td>order</td></tr>
+        <tr><td><code>/ecommerce/dev/sns/topic-arn</code></td><td>order</td></tr>
+      </table>
+      <p style="margin:10px 0 0;color:var(--muted);font-size:14px">The three service URLs all hold the internal ALB address; the ALB picks the service by path.</p>
+    </div>
+    <div class="card table-wrap">
+      <h3>Data stores</h3>
+      <table>
+        <tr><th>Store</th><th>Holds</th><th>Key or setup</th></tr>
+        <tr><td>DynamoDB <code>ecommerce-products</code></td><td>Catalog and stock</td><td><code>product_id</code>, on-demand</td></tr>
+        <tr><td>DynamoDB <code>ecommerce-cart</code></td><td>One cart per user</td><td><code>user_id</code>, on-demand</td></tr>
+        <tr><td>RDS <code>ecommercedb</code></td><td>Users, orders, order items</td><td>PostgreSQL, <code>db.t4g.micro</code>, single-AZ, not public</td></tr>
+        <tr><td>S3 frontend bucket</td><td>React build, product images</td><td>Private, read only by CloudFront</td></tr>
+      </table>
+    </div>
+    <div class="card table-wrap">
       <h3>API Gateway routes</h3>
       <table>
         <tr><th>Route</th><th>Login needed</th></tr>
@@ -418,6 +457,23 @@
       </table>
       <p style="margin:10px 0 0;color:var(--muted);font-size:14px">All three routes use the same VPC Link integration to the ALB.</p>
     </div>
+  </div>
+
+  <h2>What went wrong along the way</h2>
+  <div class="card table-wrap">
+    <table>
+      <tr><th>Problem</th><th>Cause</th><th>Fix</th></tr>
+      <tr><td>Private ECS subnets had no working route out</td><td>The route table's <code>0.0.0.0/0</code> pointed at the internet gateway. Tasks have no public IP, so image pulls and AWS API calls would have failed</td><td>Pointed the default route at the NAT gateway</td></tr>
+      <tr><td>Three target groups could not be attached to the load balancer</td><td>They were created in the default VPC, and one used the wrong port. Neither VPC nor port can be edited afterwards</td><td>Deleted and recreated them in <code>ecommerce-vpc</code> with the right ports</td></tr>
+      <tr><td>RDS “Easy create” offered no VPC choice</td><td>Easy create always uses the default VPC, and the VPC cannot be changed later</td><td>Used full configuration with the DB subnet group and <code>ecommerce-rds-sg</code></td></tr>
+      <tr><td>The task role would have been denied almost everything</td><td>A permissions boundary was selected by mistake in the role wizard, capping the role at read-only Parameter Store access</td><td>Spotted on the review page and removed before the role was created</td></tr>
+      <tr><td>Tasks would fail at start with a logging error</td><td>The task definitions ask ECS to create the log group, but the default execution role cannot create log groups</td><td>Added CloudWatch Logs permissions to <code>ecsTaskExecutionRole</code></td></tr>
+      <tr><td>First cluster creation failed: “Unable to assume the service linked role”</td><td>The ECS service-linked role is created on first use and was not ready yet</td><td>Created the cluster again once the role existed</td></tr>
+      <tr><td>product-service ran but nothing could reach it</td><td>The ECS service was created without the load balancer section, so its target group stayed empty</td><td>Attached the target group by updating the service</td></tr>
+      <tr><td>VPC link form asked for a Network Load Balancer</td><td>The legacy VPC link type only supports NLBs</td><td>Created a VPC link V2, which works with an ALB and HTTP APIs</td></tr>
+      <tr><td>API routes returned errors and the browser blocked calls</td><td>The routes had no integration attached, and CORS was not configured</td><td>Attached the ALB integration to all three routes and set CORS</td></tr>
+      <tr><td>Frontend build failed with an ESLint “jest/globals” error</td><td>With no lockfile, npm installed TypeScript 7, which <code>react-scripts</code> 5 cannot load</td><td>Pinned TypeScript 4.9.5 for the build</td></tr>
+    </table>
   </div>
 
   <div class="next">
@@ -433,9 +489,9 @@
     "<b>Module 2, Cognito.</b> A user pool holds the accounts. The browser talks to Cognito directly to sign up and sign in, and gets back a signed JWT. Nothing in the VPC is involved.",
     "<b>Module 3, frontend.</b> A private S3 bucket holds the React build. CloudFront is the only thing allowed to read it, through Origin Access Control, and serves it over HTTPS. Login can already be tested at this point.",
     "<b>Module 4, data layer.</b> Two DynamoDB tables for products and carts, one RDS PostgreSQL instance in database subnet 1 for users and orders, and Parameter Store entries holding the region, database host and password. The RDS security group accepts 5432 only from inside the VPC.",
-    "<b>Module 5, backend.</b> Four container images go to ECR and run as Fargate tasks in the private ECS subnets. Fargate decides which of the two subnets each task lands in. An internal load balancer routes by path to the right service. The tasks reach ECR, CloudWatch, Parameter Store and DynamoDB through the NAT gateway, and RDS directly. order-service also calls the other three services back through the same load balancer.",
+    "<b>Module 5, backend.</b> Four container images go to ECR and run as Fargate tasks in the private ECS subnets. Each task assumes a task role for its AWS calls, and ECS uses a task execution role to pull the image and write logs. Fargate decides which of the two subnets each task lands in. An internal load balancer routes by path to the right service. The tasks reach ECR, CloudWatch, Parameter Store and DynamoDB through the NAT gateway, and RDS directly. order-service also calls the other three services back through the same load balancer.",
     "<b>Module 6, API Gateway.</b> The load balancer is internal, so API Gateway is the public front door. It checks the JWT against Cognito, then passes the request through the VPC Link, which places it inside the private ECS subnets and on to the ALB.",
-    "<b>Module 7, integration.</b> The Cognito IDs and the API Gateway URL go into <code>aws-config.js</code>, and the rebuilt site is uploaded to S3. From now on the browser sends API calls with the JWT attached, and the whole request path is connected.",
+    "<b>Module 7, integration.</b> The Cognito IDs and the API Gateway URL go into the frontend <code>.env</code> file, and the rebuilt site is uploaded to S3. From now on the browser sends API calls with the JWT attached, and the whole request path is connected.",
     "<b>Module 8, notifications.</b> order-service publishes each new order to an SNS topic. SNS fans it out to an email subscription and to an SQS queue that stands in for a shipping system. order-service reaches SNS through the NAT gateway like every other AWS API call."
   ];
   const NAMES = [null, "Networking", "Cognito", "Frontend", "Data layer", "Backend", "API Gateway", "Integration", "Notifications"];

@@ -4,7 +4,7 @@ import { api } from '../api';
 import { useCart } from '../CartContext';
 import { useProducts } from '../ProductsContext';
 import { useToast } from '../ToastContext';
-import { formatPrice } from '../format';
+import { formatPrice, formatRupees, itemsTotal } from '../format';
 import EmptyState from './EmptyState';
 import { AlertIcon, ArrowRightIcon, BagIcon, CheckIcon, MinusIcon, PlusIcon, TrashIcon, UserIcon } from './Icons';
 import './Cart.css';
@@ -16,6 +16,8 @@ function Cart({ user, onSignInClick }) {
   const [busyId, setBusyId] = useState(null);
   const [placing, setPlacing] = useState(false);
   const [placedOrder, setPlacedOrder] = useState(null);
+
+  const total = itemsTotal(items);
 
   const handleQuantity = async (item, quantity) => {
     if (quantity < 1) return;
@@ -47,7 +49,7 @@ function Cart({ user, onSignInClick }) {
     setPlacing(true);
     try {
       const order = await api.createOrder();
-      setPlacedOrder(order);
+      setPlacedOrder({ id: order.id, total });
       await refreshCartCount(); // Update cart badge
       loadProducts({ silent: true }); // Stock changed
     } catch (err) {
@@ -57,7 +59,6 @@ function Cart({ user, onSignInClick }) {
     }
   };
 
-  const total = items.reduce((sum, item) => sum + (item.price * item.quantity), 0);
 
   if (!user) {
     return (
@@ -79,7 +80,7 @@ function Cart({ user, onSignInClick }) {
         <EmptyState
           icon={<CheckIcon size={28} />}
           title="Order placed"
-          text={`Order #${placedOrder.id} for ${formatPrice(placedOrder.total_amount)} is confirmed.`}
+          text={`Order #${placedOrder.id} for ${formatRupees(placedOrder.total)} is confirmed.`}
         >
           <Link to="/orders" className="btn btn-primary">View orders</Link>
           <Link to="/" className="btn btn-secondary">Keep shopping</Link>
@@ -164,7 +165,7 @@ function Cart({ user, onSignInClick }) {
                     <PlusIcon size={16} />
                   </button>
                 </div>
-                <p className="subtotal">{formatPrice(item.price * item.quantity)}</p>
+                <p className="subtotal">{formatPrice(item.price, item.quantity)}</p>
                 <button
                   className="icon-btn remove-btn"
                   onClick={() => handleRemove(item.product_id)}
@@ -187,11 +188,11 @@ function Cart({ user, onSignInClick }) {
             </div>
             <div>
               <dt>Subtotal</dt>
-              <dd>{formatPrice(total)}</dd>
+              <dd>{formatRupees(total)}</dd>
             </div>
             <div className="summary-total">
               <dt>Total</dt>
-              <dd>{formatPrice(total)}</dd>
+              <dd>{formatRupees(total)}</dd>
             </div>
           </dl>
           <button className="btn btn-primary btn-block" onClick={handleCheckout} disabled={placing}>

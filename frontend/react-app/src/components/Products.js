@@ -5,6 +5,7 @@ import { useProducts } from '../ProductsContext';
 import { useToast } from '../ToastContext';
 import { formatPrice } from '../format';
 import EmptyState from './EmptyState';
+import ProductModal from './ProductModal';
 import { AlertIcon, CheckIcon, PlusIcon, SearchIcon } from './Icons';
 import './Products.css';
 
@@ -26,6 +27,7 @@ function Products({ user, onSignInClick }) {
   const [sort, setSort] = useState('featured');
   const [addingId, setAddingId] = useState(null);
   const [addedId, setAddedId] = useState(null);
+  const [selected, setSelected] = useState(null);
 
   const categories = useMemo(
     () => ['All', ...Array.from(new Set(products.map(product => product.category))).sort()],
@@ -42,23 +44,41 @@ function Products({ user, onSignInClick }) {
     return compare ? [...filtered].sort(compare) : filtered;
   }, [products, query, category, sort]);
 
+  // One product from each category for the hero, largest categories first
+  const featured = useMemo(() => {
+    const byCategory = {};
+    products.forEach(product => {
+      (byCategory[product.category] = byCategory[product.category] || []).push(product);
+    });
+    return Object.values(byCategory)
+      .sort((a, b) => b.length - a.length)
+      .slice(0, 3)
+      .map(group => group[0]);
+  }, [products]);
+
+  const lowestPrice = products.length ? Math.min(...products.map(product => product.price)) : 0;
+
   const quantityInCart = (productId) =>
     items.find(item => item.product_id === productId)?.quantity || 0;
 
-  const handleAddToCart = async (product) => {
+  // Resolves to true when the item was added
+  const handleAddToCart = async (product, quantity = 1) => {
     if (!user) {
+      setSelected(null);
       onSignInClick();
-      return;
+      return false;
     }
     setAddingId(product.product_id);
     try {
-      await api.addToCart(product.product_id, 1, product.price);
+      await api.addToCart(product.product_id, quantity, product.price);
       await refreshCartCount(); // Update cart badge
       setAddedId(product.product_id);
       setTimeout(() => setAddedId(current => (current === product.product_id ? null : current)), 1600);
-      showToast(`Added ${product.name} to cart`);
+      showToast(quantity > 1 ? `Added ${quantity} × ${product.name} to cart` : `Added ${product.name} to cart`);
+      return true;
     } catch (err) {
       showToast('Could not add to cart. Please try again.', 'error');
+      return false;
     } finally {
       setAddingId(null);
     }
@@ -73,21 +93,52 @@ function Products({ user, onSignInClick }) {
     <div className="products">
       <section className="hero">
         <div className="container hero-inner">
-          <p className="eyebrow">
-            {loading || error ? 'Shop' : `${products.length} products · ${categories.length - 1} categories`}
-          </p>
-          <h1>Tech and essentials for a better workspace.</h1>
-          <p className="hero-sub">Browse electronics, accessories and furniture, then check out in a couple of clicks.</p>
-          <label className="search">
-            <SearchIcon />
-            <input
-              type="search"
-              placeholder="Search products"
-              value={query}
-              onChange={(e) => setQuery(e.target.value)}
-              aria-label="Search products"
-            />
-          </label>
+          <div className="hero-copy">
+            <p className="eyebrow">Workspace store</p>
+            <h1>Tech and essentials for a better workspace.</h1>
+            <p className="hero-sub">Browse electronics, accessories and furniture, then check out in a couple of clicks.</p>
+            <label className="search">
+              <SearchIcon />
+              <input
+                type="search"
+                placeholder="Search products"
+                value={query}
+                onChange={(e) => setQuery(e.target.value)}
+                aria-label="Search products"
+              />
+            </label>
+            {!loading && !error && products.length > 0 && (
+              <dl className="hero-stats">
+                <div>
+                  <dt>Products</dt>
+                  <dd>{products.length}</dd>
+                </div>
+                <div>
+                  <dt>Categories</dt>
+                  <dd>{categories.length - 1}</dd>
+                </div>
+                <div>
+                  <dt>Prices from</dt>
+                  <dd>{formatPrice(lowestPrice)}</dd>
+                </div>
+              </dl>
+            )}
+          </div>
+          <div className="hero-collage" aria-hidden={loading || !featured.length}>
+            {loading ? (
+              Array.from({ length: 3 }).map((_, idx) => <div key={idx} className="skeleton collage-tile" />)
+            ) : (
+              featured.map(product => (
+                <button key={product.product_id} className="collage-tile" onClick={() => setSelected(product)}>
+                  <img src={product.image_url} alt={product.name} />
+                  <span className="collage-caption">
+                    <span>{product.name}</span>
+                    <strong>{formatPrice(product.price)}</strong>
+                  </span>
+                </button>
+              ))
+            )}
+          </div>
         </div>
       </section>
 
@@ -164,7 +215,14 @@ function Products({ user, onSignInClick }) {
                   return (
                     <article key={product.product_id} className="product-card">
                       <div className="product-media">
-                        <img src={product.image_url} alt={product.name} loading="lazy" />
+                        <button
+                          className="product-media-btn"
+                          onClick={() => setSelected(product)}
+                          aria-label={`View ${product.name}`}
+                        >
+                          <img src={product.image_url} alt={product.name} loading="lazy" />
+                          <span className="quick-view-hint">Quick view</span>
+                        </button>
                         {soldOut ? (
                           <span className="pill pill-neutral media-badge">Sold out</span>
                         ) : product.stock <= LOW_STOCK && (
@@ -174,7 +232,11 @@ function Products({ user, onSignInClick }) {
                       </div>
                       <div className="product-body">
                         <span className="product-category">{product.category}</span>
-                        <h3>{product.name}</h3>
+                        <h3>
+                          <button className="product-title-btn" onClick={() => setSelected(product)}>
+                            {product.name}
+                          </button>
+                        </h3>
                         <p>{product.description}</p>
                         <div className="product-footer">
                           <span className="price">{formatPrice(product.price)}</span>
@@ -196,6 +258,16 @@ function Products({ user, onSignInClick }) {
           </>
         )}
       </section>
+
+      {selected && (
+        <ProductModal
+          product={selected}
+          inCart={quantityInCart(selected.product_id)}
+          lowStock={LOW_STOCK}
+          onAdd={handleAddToCart}
+          onClose={() => setSelected(null)}
+        />
+      )}
     </div>
   );
 }

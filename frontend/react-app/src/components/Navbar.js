@@ -25,7 +25,7 @@ function Navbar({ signOut, user, onSignInClick }) {
           </NavLink>
           <NavLink to="/cart" className="icon-btn nav-cart" aria-label={`Cart, ${cartCount} items`}>
             <BagIcon />
-            {cartCount > 0 && <span className="cart-badge">{cartCount}</span>}
+            {cartCount > 0 && <span key={cartCount} className="cart-badge">{cartCount}</span>}
           </NavLink>
           {user ? (
             <div className="user-info">

@@ -2,7 +2,7 @@ import React, { useState, useEffect, useCallback } from 'react';
 import { Link } from 'react-router-dom';
 import { api } from '../api';
 import { useProducts } from '../ProductsContext';
-import { formatDate, formatPrice } from '../format';
+import { formatDate, formatPrice, formatRupees, itemsTotal } from '../format';
 import EmptyState from './EmptyState';
 import { AlertIcon, PackageIcon, UserIcon } from './Icons';
 import './Orders.css';
@@ -122,14 +122,14 @@ function Orders({ user, onSignInClick }) {
                     </div>
                     <span className="order-item-name">{product?.name || item.product_id}</span>
                     <span className="order-item-qty">{item.quantity} × {formatPrice(item.price)}</span>
-                    <span className="order-item-total">{formatPrice(item.price * item.quantity)}</span>
+                    <span className="order-item-total">{formatPrice(item.price, item.quantity)}</span>
                   </li>
                 );
               })}
             </ul>
             <footer className="order-total">
               <span>Total</span>
-              <strong>{formatPrice(order.total_amount)}</strong>
+              <strong>{formatRupees(itemsTotal(order.items))}</strong>
             </footer>
           </article>
         ))}
